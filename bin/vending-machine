@@ -1,0 +1,15 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use VendingMachine\Application\InsertCoin\InsertCoinHandler;
+use VendingMachine\Infrastructure\Cli\VendingMachineConsole;
+use VendingMachine\Infrastructure\Persistence\InMemoryVendingMachineRepository;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+$repository = new InMemoryVendingMachineRepository();
+$console = new VendingMachineConsole(new InsertCoinHandler($repository));
+
+$console->run();
