@@ -32,14 +32,18 @@ Code is organized per bounded context, each split into the hexagonal layers:
 
 ```
 src/VendingMachine/
-├── domain/          # Entities, value objects and business rules
-├── application/     # Use cases orchestrating the domain
-└── infrastructure/  # CLI entry point and adapters
+├── Domain/          # Entities, value objects and business rules
+├── Application/     # Use cases orchestrating the domain
+└── Infrastructure/  # CLI entry point and adapters
+```
 
-tests/
-├── Unit/            # Domain unit tests
-├── Behaviour/       # Application-level behaviour tests
-└── Integration/     # Infrastructure integration tests
+Tests mirror that layout per context, and the PHPUnit suites map onto the layers:
+
+```
+tests/VendingMachine/
+├── Domain/          # Unit suite         — domain unit tests
+├── Application/     # Behaviour suite     — application-level behaviour tests
+└── Infrastructure/  # Integration suite   — infrastructure integration tests
 ```
 
 ## Conventions

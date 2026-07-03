@@ -34,7 +34,9 @@ We need to install Docker, and inside the container we will be using PHP 8.3, Co
 
 ## Folder structure
 
-The folder structure will be separated per context, with `infrastructure`, `application` and `domain` inside each one. E.g. `/src/VendingMachine/domain`, `/src/VendingMachine/application`, `/src/VendingMachine/infrastructure`, and so on.
+The folder structure will be separated per context, with `Infrastructure`, `Application` and `Domain` inside each one. E.g. `/src/VendingMachine/Domain`, `/src/VendingMachine/Application`, `/src/VendingMachine/Infrastructure`, and so on.
+
+Layer folders are StudlyCaps so they match their namespace segment (`VendingMachine\Domain\...`): PSR-4 autoloading is case-sensitive on Linux/CI, so a lowercase folder with a StudlyCaps namespace would fail to autoload there.
 
 ## User stories
 
