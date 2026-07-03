@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-It is mandatory that you don't do any commit without my revision.
-
 In this project we are implementing a vending machine. We are using Docker and plain PHP 8.3.
 
 - **Architectural pattern:** hexagonal architecture.
@@ -10,13 +8,13 @@ In this project we are implementing a vending machine. We are using Docker and p
 
 ## Rules
 
-- Do not make any commit without my review.
+- Not make any commit without my review.
 - Keep the solution simple. Do not add patterns, layers or infrastructure the task does not need.
 - Ask before adding any dependency.
 - Plain PHP + Composer for this scope.
 - State is kept in memory for this scope.
 - The entry point will be a CLI for this scope.
-- Amounts have to be treated as cents, user integers.
+- Amounts have to be treated as cents, use integers.
 
 ## Git workflow
 
