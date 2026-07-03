@@ -27,3 +27,33 @@ We need to install Docker, and inside the container we will be using PHP 8.3, Co
 ## Folder structure
 
 The folder structure will be separated per context, with `infrastructure`, `application` and `domain` inside each one. E.g. `/src/VendingMachine/domain`, `/src/VendingMachine/application`, `/src/VendingMachine/infrastructure`, and so on.
+
+
+## User Stories
+
+## User stories
+
+### 1. Insert coin
+As a **customer**, I want to **insert coins one at a time**, so that **I can build up credit toward a product**.
+- Accepted coins: 0.05, 0.10, 0.25, 1.00.
+- Any other denomination is rejected.
+
+### 2. Return coins
+As a **customer**, I want to **get my inserted coins back**, so that **I can change my mind before buying**.
+- Returns all money inserted so far.
+
+### 3. Buy product
+As a **customer**, I want to **select and buy a product**, so that **I receive the item, plus any change I'm owed**.
+- Products: Water (0.65), Juice (1.00), Soda (1.50).
+- On success: dispense the item and return any change.
+- Fails if the product is out of stock.
+- Fails if the inserted money is insufficient.
+- Fails if the machine cannot compose the exact change.
+
+### 4. View machine state
+As a **customer**, I want to **see the current state (my balance, stock and prices)**, so that **I know what I can buy**.
+- Shows inserted balance, available products with prices, and stock.
+
+### 5. Service the machine
+As a **service technician**, I want to **refill products and set the available change**, so that **the machine can keep serving customers**.
+- Sets item counts and the available change in the coin bank.
