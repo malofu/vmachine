@@ -16,6 +16,7 @@ In this project we are implementing a vending machine. We are using Docker and p
 - Plain PHP + Composer for this scope.
 - State is kept in memory for this scope.
 - The entry point will be a CLI for this scope.
+- Amounts have to be treated as cents, user integers.
 
 ## Git workflow
 
@@ -64,3 +65,12 @@ As a **customer**, I want to **see the current state (my balance, stock and pric
 As a **service technician**, I want to **refill products and set the available change**, so that **the machine can keep serving customers**.
 - Sets item counts and the available change in the coin bank.
 
+## Glossary
+
+- **Coin** — a single accepted denomination: 0.05, 0.10, 0.25 or 1.00.
+- **Money** — an amount of value, expressed as a sum of coins.
+- **Product** — an item for sale, with a name, a price and a selector (Water, Juice, Soda).
+- **Inventory** — the stock of products the machine holds, each with a count.
+- **CoinBank** — the coins the machine holds and uses to give change.
+- **Change** — the coins returned to the customer when they pay more than the price.
+- **VendingMachine** — the machine as a whole: it holds the products, the coins and the currently inserted money, and enforces the rules of a sale.
