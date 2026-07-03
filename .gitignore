@@ -1,1 +1,6 @@
 TASK.md
+
+/vendor/
+/.phpunit.cache/
+.phpunit.result.cache
+.DS_Store

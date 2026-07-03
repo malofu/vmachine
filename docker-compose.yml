@@ -1,0 +1,8 @@
+services:
+  app:
+    build: .
+    working_dir: /app
+    volumes:
+      - .:/app
+    # Keep the container alive so we can exec commands into it
+    command: tail -f /dev/null
