@@ -8,6 +8,15 @@ In this project we are implementing a vending machine. We are using Docker and p
 - **Design approach:** DDD.
 - **Coding style:** PSR-12.
 
+## Rules
+
+- Do not make any commit without my review.
+- Keep the solution simple. Do not add patterns, layers or infrastructure the task does not need.
+- Ask before adding any dependency.
+- Plain PHP + Composer for this scope.
+- State is kept in memory for this scope.
+- The entry point will be a CLI for this scope.
+
 ## Git workflow
 
 We are using GitHub. Every use case will have its own branch with different commits. I will review every commit by myself before pushing it. That branch will be merged to `dev` using a pull request, which also will be reviewed by myself.
@@ -27,9 +36,6 @@ We need to install Docker, and inside the container we will be using PHP 8.3, Co
 ## Folder structure
 
 The folder structure will be separated per context, with `infrastructure`, `application` and `domain` inside each one. E.g. `/src/VendingMachine/domain`, `/src/VendingMachine/application`, `/src/VendingMachine/infrastructure`, and so on.
-
-
-## User Stories
 
 ## User stories
 
@@ -57,3 +63,4 @@ As a **customer**, I want to **see the current state (my balance, stock and pric
 ### 5. Service the machine
 As a **service technician**, I want to **refill products and set the available change**, so that **the machine can keep serving customers**.
 - Sets item counts and the available change in the coin bank.
+
