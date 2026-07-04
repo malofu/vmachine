@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use VendingMachine\Application\InsertCoin\InsertCoinHandler;
+use VendingMachine\Application\ReturnCoins\ReturnCoinsHandler;
 use VendingMachine\Infrastructure\Cli\VendingMachineConsole;
 use VendingMachine\Infrastructure\Persistence\InMemoryVendingMachineRepository;
 
@@ -18,8 +19,10 @@ function runConsoleWith(string $input): string
     fwrite($in, $input);
     rewind($in);
 
+    $repository = new InMemoryVendingMachineRepository();
     $console = new VendingMachineConsole(
-        new InsertCoinHandler(new InMemoryVendingMachineRepository()),
+        new InsertCoinHandler($repository),
+        new ReturnCoinsHandler($repository),
         $in,
         $out,
     );
@@ -58,4 +61,23 @@ it('reports unrecognised input, reminds of the accepted coins and does not affec
 
     expect($output)->toContain('Unrecognised input: "abc". Accepted coins: 0.05, 0.10, 0.25, 1.00.')
         ->and($output)->toContain('Accepted. Balance: 0.25');
+});
+
+it('returns all inserted coins and resets the balance', function () {
+    $output = runConsoleWith("0.10\n0.10\nreturn\nexit\n");
+
+    expect($output)->toContain('Returned: 0.10, 0.10. Balance: 0.00');
+});
+
+it('lets the customer keep inserting after a return', function () {
+    $output = runConsoleWith("0.25\nreturn\n0.10\nexit\n");
+
+    expect($output)->toContain('Returned: 0.25. Balance: 0.00')
+        ->and($output)->toContain('Accepted. Balance: 0.10');
+});
+
+it('reports there is nothing to return when no coins were inserted', function () {
+    $output = runConsoleWith("return\nexit\n");
+
+    expect($output)->toContain('No coins to return. Balance: 0.00');
 });
