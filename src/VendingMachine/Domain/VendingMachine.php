@@ -24,6 +24,18 @@ final class VendingMachine
         $this->insertedMoney = $this->insertedMoney->add($coin);
     }
 
+    /**
+     * Hands back everything inserted so far and leaves the machine with an
+     * empty balance, ready for the next customer.
+     */
+    public function returnCoins(): InsertedMoney
+    {
+        $returned = $this->insertedMoney;
+        $this->insertedMoney = InsertedMoney::none();
+
+        return $returned;
+    }
+
     public function insertedBalance(): int
     {
         return $this->insertedMoney->total();

@@ -6,6 +6,8 @@ namespace VendingMachine\Infrastructure\Cli;
 
 use VendingMachine\Application\InsertCoin\InsertCoinCommand;
 use VendingMachine\Application\InsertCoin\InsertCoinHandler;
+use VendingMachine\Application\ReturnCoins\ReturnCoinsCommand;
+use VendingMachine\Application\ReturnCoins\ReturnCoinsHandler;
 use VendingMachine\Domain\Coin;
 use VendingMachine\Domain\InvalidCoinException;
 
@@ -34,6 +36,7 @@ final class VendingMachineConsole
      */
     public function __construct(
         private readonly InsertCoinHandler $insertCoin,
+        private readonly ReturnCoinsHandler $returnCoins,
         $input = STDIN,
         $output = STDOUT,
     ) {
@@ -52,8 +55,16 @@ final class VendingMachineConsole
                 continue;
             }
 
-            if (in_array(strtolower($entry), ['exit', 'quit'], true)) {
+            $command = strtolower($entry);
+
+            if (in_array($command, ['exit', 'quit'], true)) {
                 break;
+            }
+
+            if (in_array($command, ['return', 'return-coin'], true)) {
+                $this->handleReturn();
+
+                continue;
             }
 
             $this->handle($entry);
@@ -88,10 +99,33 @@ final class VendingMachineConsole
         }
     }
 
+    /**
+     * Hands the customer back everything they inserted and resets the balance.
+     */
+    private function handleReturn(): void
+    {
+        $response = ($this->returnCoins)(new ReturnCoinsCommand());
+        $this->balanceInCents = 0;
+
+        if ($response->returnedCoinsInCents === []) {
+            $this->writeln(sprintf('No coins to return. Balance: %s', $this->format(0)));
+
+            return;
+        }
+
+        $coins = implode(', ', array_map(
+            fn (int $cents): string => $this->format($cents),
+            $response->returnedCoinsInCents,
+        ));
+
+        $this->writeln(sprintf('Returned: %s. Balance: %s', $coins, $this->format(0)));
+    }
+
     private function greet(): void
     {
         $this->writeln('Vending Machine');
         $this->writeln(sprintf('Insert coins one at a time. Accepted coins: %s.', $this->acceptedCoins()));
+        $this->writeln("Type 'return' to get your coins back.");
         $this->writeln("Type 'exit' to quit.");
     }
 
