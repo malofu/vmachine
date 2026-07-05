@@ -6,6 +6,7 @@ declare(strict_types=1);
 use VendingMachine\Application\BuyProduct\BuyProductHandler;
 use VendingMachine\Application\InsertCoin\InsertCoinHandler;
 use VendingMachine\Application\ReturnCoins\ReturnCoinsHandler;
+use VendingMachine\Application\ServiceMachine\ServiceMachineHandler;
 use VendingMachine\Application\ViewState\ViewStateHandler;
 use VendingMachine\Domain\Coin;
 use VendingMachine\Domain\CoinBank;
@@ -34,11 +35,17 @@ $coinBank = CoinBank::empty()
 $repository = new InMemoryVendingMachineRepository();
 $repository->save(VendingMachine::stocked($inventory, $coinBank));
 
+// The passcode that unlocks service mode — infrastructure config, standing in
+// for the technician's physical key (not real authentication).
+$serviceCode = '1234';
+
 $console = new VendingMachineConsole(
     new InsertCoinHandler($repository),
     new ReturnCoinsHandler($repository),
     new BuyProductHandler($repository),
     new ViewStateHandler($repository),
+    new ServiceMachineHandler($repository),
+    $serviceCode,
 );
 
 $console->run();

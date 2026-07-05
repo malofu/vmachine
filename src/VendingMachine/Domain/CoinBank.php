@@ -57,6 +57,11 @@ final class CoinBank
         return new self($coins);
     }
 
+    public function countOf(Coin $coin): int
+    {
+        return $this->coins[$coin->cents()] ?? 0;
+    }
+
     public function total(): int
     {
         $total = 0;

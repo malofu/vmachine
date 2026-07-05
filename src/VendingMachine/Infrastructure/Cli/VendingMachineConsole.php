@@ -10,6 +10,9 @@ use VendingMachine\Application\InsertCoin\InsertCoinCommand;
 use VendingMachine\Application\InsertCoin\InsertCoinHandler;
 use VendingMachine\Application\ReturnCoins\ReturnCoinsCommand;
 use VendingMachine\Application\ReturnCoins\ReturnCoinsHandler;
+use VendingMachine\Application\ServiceMachine\MachineReport;
+use VendingMachine\Application\ServiceMachine\ServiceMachineCommand;
+use VendingMachine\Application\ServiceMachine\ServiceMachineHandler;
 use VendingMachine\Application\ViewState\ViewStateCommand;
 use VendingMachine\Application\ViewState\ViewStateHandler;
 use VendingMachine\Domain\CannotMakeChangeException;
@@ -27,6 +30,11 @@ use VendingMachine\Domain\UnknownProductException;
  * This is the only place that knows about strings and I/O. Parsing a decimal
  * into cents and formatting cents back into a "X.XX" string live here; the
  * application and domain only ever deal in integer cents.
+ *
+ * The machine has two audiences. Customers insert coins, buy and view state. A
+ * service technician enters a passcode-gated service mode to refill stock and
+ * change — a simulation of the physical key that keeps a customer out, not real
+ * authentication.
  */
 final class VendingMachineConsole
 {
@@ -39,6 +47,15 @@ final class VendingMachineConsole
     /** Last balance we echoed, so a rejection can show it unchanged. */
     private int $balanceInCents = 0;
 
+    /** Whether the technician has unlocked service mode. */
+    private bool $serviceMode = false;
+
+    /** @var array<string, int> pending item counts staged in service mode (selector => count) */
+    private array $pendingProductCounts = [];
+
+    /** @var array<int, int> pending coin counts staged in service mode (cents => count) */
+    private array $pendingCoinCounts = [];
+
     /**
      * @param resource $input
      * @param resource $output
@@ -48,6 +65,8 @@ final class VendingMachineConsole
         private readonly ReturnCoinsHandler $returnCoins,
         private readonly BuyProductHandler $buyProduct,
         private readonly ViewStateHandler $viewState,
+        private readonly ServiceMachineHandler $serviceMachine,
+        private readonly string $serviceCode,
         $input = STDIN,
         $output = STDOUT,
     ) {
@@ -69,12 +88,24 @@ final class VendingMachineConsole
 
             $command = strtolower($entry);
 
+            if ($this->serviceMode) {
+                $this->handleServiceEntry($entry, $command);
+
+                continue;
+            }
+
             if (in_array($command, ['exit', 'quit'], true)) {
                 break;
             }
 
             if (in_array($command, ['return', 'return-coin'], true)) {
                 $this->handleReturn();
+
+                continue;
+            }
+
+            if ($command === 'service') {
+                $this->enterServiceMode();
 
                 continue;
             }
@@ -211,6 +242,156 @@ final class VendingMachineConsole
                 $this->format($this->balanceInCents),
             ));
         }
+    }
+
+    /**
+     * Unlocks service mode if the next line matches the service code — the
+     * adapter's stand-in for the technician's physical key. A customer without
+     * the code stays in customer mode.
+     */
+    private function enterServiceMode(): void
+    {
+        $this->writeln('Service — enter code:');
+
+        $line = fgets($this->input);
+        $code = $line === false ? '' : trim($line);
+
+        if (!hash_equals($this->serviceCode, $code)) {
+            $this->writeln('Access denied.');
+
+            return;
+        }
+
+        $this->serviceMode = true;
+        $this->pendingProductCounts = [];
+        $this->pendingCoinCounts = [];
+        $this->writeln('Service mode. Commands: stock <product> <count>, change <coin> <count>, state, apply, close.');
+        $this->showServiceState();
+    }
+
+    /**
+     * Routes a line typed while in service mode. Only technician commands are
+     * honoured here; customer commands are not.
+     */
+    private function handleServiceEntry(string $entry, string $command): void
+    {
+        if ($command === 'close') {
+            $this->closeServiceMode();
+
+            return;
+        }
+
+        if ($command === 'state') {
+            $this->showServiceState();
+
+            return;
+        }
+
+        if ($command === 'apply') {
+            $this->applyService();
+
+            return;
+        }
+
+        if (preg_match('/^stock\s+(\w+)\s+(\d+)$/i', $entry, $matches) === 1) {
+            $this->pendingProductCounts[strtoupper($matches[1])] = (int) $matches[2];
+            $this->writeln(sprintf('Staged: %s -> %d. Type \'apply\' to commit.', strtoupper($matches[1]), (int) $matches[2]));
+
+            return;
+        }
+
+        if (preg_match('/^change\s+(\S+)\s+(\d+)$/i', $entry, $matches) === 1) {
+            $cents = $this->parseCents($matches[1]);
+
+            if ($cents === null) {
+                $this->writeln(sprintf('Unrecognised amount: "%s".', $matches[1]));
+
+                return;
+            }
+
+            $this->pendingCoinCounts[$cents] = (int) $matches[2];
+            $this->writeln(sprintf('Staged: %s -> %d. Type \'apply\' to commit.', $this->format($cents), (int) $matches[2]));
+
+            return;
+        }
+
+        $this->writeln(sprintf(
+            'Unrecognised service command: "%s". Use stock <product> <count>, change <coin> <count>, state, apply or close.',
+            $entry,
+        ));
+    }
+
+    /**
+     * Commits the staged setup as one atomic servicing action. On an unknown
+     * product or invalid coin nothing is changed and the draft is kept so the
+     * technician can fix it.
+     */
+    private function applyService(): void
+    {
+        try {
+            $report = ($this->serviceMachine)(new ServiceMachineCommand(
+                $this->pendingProductCounts,
+                $this->pendingCoinCounts,
+            ));
+        } catch (UnknownProductException | InvalidCoinException $e) {
+            $this->writeln(sprintf('Cannot apply: %s Nothing changed.', $e->getMessage()));
+
+            return;
+        }
+
+        $this->pendingProductCounts = [];
+        $this->pendingCoinCounts = [];
+        $this->writeln('Applied.');
+        $this->printReport($report);
+    }
+
+    /**
+     * Leaves service mode, discarding any staged-but-unapplied setup, and shows
+     * the customer face again.
+     */
+    private function closeServiceMode(): void
+    {
+        if ($this->pendingProductCounts !== [] || $this->pendingCoinCounts !== []) {
+            $this->writeln('Discarded un-applied changes.');
+        }
+
+        $this->serviceMode = false;
+        $this->pendingProductCounts = [];
+        $this->pendingCoinCounts = [];
+        $this->writeln('Service closed.');
+        $this->handleState();
+    }
+
+    /**
+     * The technician view: exact per-product and per-denomination counts. Sent
+     * as an empty service command, which applies nothing and returns the
+     * current report.
+     */
+    private function showServiceState(): void
+    {
+        $this->printReport(($this->serviceMachine)(new ServiceMachineCommand()));
+    }
+
+    private function printReport(MachineReport $report): void
+    {
+        $this->writeln('Stock:');
+
+        foreach ($report->products as $product) {
+            $this->writeln(sprintf(
+                '- %s (%s): %d',
+                $product->selector,
+                $this->format($product->priceInCents),
+                $product->count,
+            ));
+        }
+
+        $this->writeln('Change:');
+
+        foreach ($report->coins as $coin) {
+            $this->writeln(sprintf('- %s: %d', $this->format($coin->cents), $coin->count));
+        }
+
+        $this->writeln(sprintf('Total change: %s', $this->format($report->changeTotalInCents)));
     }
 
     /**
