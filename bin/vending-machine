@@ -3,17 +3,40 @@
 
 declare(strict_types=1);
 
+use VendingMachine\Application\BuyProduct\BuyProductHandler;
 use VendingMachine\Application\InsertCoin\InsertCoinHandler;
 use VendingMachine\Application\ReturnCoins\ReturnCoinsHandler;
+use VendingMachine\Domain\Coin;
+use VendingMachine\Domain\CoinBank;
+use VendingMachine\Domain\Inventory;
+use VendingMachine\Domain\Product;
+use VendingMachine\Domain\VendingMachine;
 use VendingMachine\Infrastructure\Cli\VendingMachineConsole;
 use VendingMachine\Infrastructure\Persistence\InMemoryVendingMachineRepository;
 
 require __DIR__ . '/../vendor/autoload.php';
 
+// Seed the machine with stock and change so it can vend right away. Setting
+// this at runtime is the Service technician's job (a later story); until then
+// the bootstrap provisions sensible defaults here in the infrastructure layer.
+$inventory = Inventory::empty()
+    ->withStock(Product::Water, 5)
+    ->withStock(Product::Juice, 5)
+    ->withStock(Product::Soda, 5);
+
+$coinBank = CoinBank::empty()
+    ->withCoins(Coin::OneEuro, 10)
+    ->withCoins(Coin::TwentyFiveCents, 20)
+    ->withCoins(Coin::TenCents, 20)
+    ->withCoins(Coin::FiveCents, 20);
+
 $repository = new InMemoryVendingMachineRepository();
+$repository->save(VendingMachine::stocked($inventory, $coinBank));
+
 $console = new VendingMachineConsole(
     new InsertCoinHandler($repository),
     new ReturnCoinsHandler($repository),
+    new BuyProductHandler($repository),
 );
 
 $console->run();

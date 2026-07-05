@@ -4,12 +4,19 @@ declare(strict_types=1);
 
 namespace VendingMachine\Infrastructure\Cli;
 
+use VendingMachine\Application\BuyProduct\BuyProductCommand;
+use VendingMachine\Application\BuyProduct\BuyProductHandler;
 use VendingMachine\Application\InsertCoin\InsertCoinCommand;
 use VendingMachine\Application\InsertCoin\InsertCoinHandler;
 use VendingMachine\Application\ReturnCoins\ReturnCoinsCommand;
 use VendingMachine\Application\ReturnCoins\ReturnCoinsHandler;
+use VendingMachine\Domain\CannotMakeChangeException;
 use VendingMachine\Domain\Coin;
+use VendingMachine\Domain\InsufficientMoneyException;
 use VendingMachine\Domain\InvalidCoinException;
+use VendingMachine\Domain\OutOfStockException;
+use VendingMachine\Domain\Product;
+use VendingMachine\Domain\UnknownProductException;
 
 /**
  * Interactive REPL: the user types one coin per line (e.g. "0.25", "1") and the
@@ -37,6 +44,7 @@ final class VendingMachineConsole
     public function __construct(
         private readonly InsertCoinHandler $insertCoin,
         private readonly ReturnCoinsHandler $returnCoins,
+        private readonly BuyProductHandler $buyProduct,
         $input = STDIN,
         $output = STDOUT,
     ) {
@@ -63,6 +71,12 @@ final class VendingMachineConsole
 
             if (in_array($command, ['return', 'return-coin'], true)) {
                 $this->handleReturn();
+
+                continue;
+            }
+
+            if (preg_match('/^get[\s\-]+(\w+)$/i', $entry, $matches) === 1) {
+                $this->handleBuy($matches[1]);
 
                 continue;
             }
@@ -121,12 +135,85 @@ final class VendingMachineConsole
         $this->writeln(sprintf('Returned: %s. Balance: %s', $coins, $this->format(0)));
     }
 
+    /**
+     * Attempts to buy a product. On success the item is dispensed with any
+     * change; on any rule violation the balance is left untouched so the
+     * customer can add more coins or ask for their money back.
+     */
+    private function handleBuy(string $selector): void
+    {
+        try {
+            $response = ($this->buyProduct)(new BuyProductCommand($selector));
+            $this->balanceInCents = $response->balanceInCents;
+            $this->writeln(sprintf(
+                'Dispensed: %s. Change: %s. Balance: %s',
+                $response->productSelector,
+                $this->formatChange($response->changeInCents),
+                $this->format($this->balanceInCents),
+            ));
+        } catch (UnknownProductException) {
+            $this->writeln(sprintf(
+                'Unknown product: "%s". Available: %s. Balance: %s',
+                $selector,
+                $this->availableProducts(),
+                $this->format($this->balanceInCents),
+            ));
+        } catch (OutOfStockException) {
+            $this->writeln(sprintf(
+                'Out of stock: %s. Balance: %s',
+                strtoupper($selector),
+                $this->format($this->balanceInCents),
+            ));
+        } catch (InsufficientMoneyException $e) {
+            $this->writeln(sprintf(
+                'Insufficient balance for %s: needs %s. Balance: %s',
+                strtoupper($selector),
+                $this->format($e->priceInCents()),
+                $this->format($this->balanceInCents),
+            ));
+        } catch (CannotMakeChangeException) {
+            $this->writeln(sprintf(
+                'Cannot give exact change for %s. Insert the exact amount or type \'return\'. Balance: %s',
+                strtoupper($selector),
+                $this->format($this->balanceInCents),
+            ));
+        }
+    }
+
     private function greet(): void
     {
         $this->writeln('Vending Machine');
         $this->writeln(sprintf('Insert coins one at a time. Accepted coins: %s.', $this->acceptedCoins()));
+        $this->writeln(sprintf("Type 'get <product>' to buy. Products: %s.", $this->availableProducts()));
         $this->writeln("Type 'return' to get your coins back.");
         $this->writeln("Type 'exit' to quit.");
+    }
+
+    /**
+     * The products the machine can sell, formatted for display. Sourced from the
+     * Product enum so the domain stays the single authority on the catalogue.
+     */
+    private function availableProducts(): string
+    {
+        return implode(', ', array_map(
+            fn (Product $product): string => sprintf('%s (%s)', $product->selector(), $this->format($product->price())),
+            Product::cases(),
+        ));
+    }
+
+    /**
+     * @param list<int> $changeInCents
+     */
+    private function formatChange(array $changeInCents): string
+    {
+        if ($changeInCents === []) {
+            return 'none';
+        }
+
+        return implode(', ', array_map(
+            fn (int $cents): string => $this->format($cents),
+            $changeInCents,
+        ));
     }
 
     /**
