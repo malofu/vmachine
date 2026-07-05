@@ -62,6 +62,20 @@ it('returns nothing when no coins were inserted', function () {
         ->and($machine->insertedBalance())->toBe(0);
 });
 
+it('reports a product as available while it has stock and sold out once empty', function () {
+    $machine = machineWith(waterStock: 1, coins: []);
+    $machine->insertCoin(Coin::TwentyFiveCents);
+    $machine->insertCoin(Coin::TwentyFiveCents);
+    $machine->insertCoin(Coin::FiveCents);
+    $machine->insertCoin(Coin::TenCents);
+
+    expect($machine->isAvailable(Product::Water))->toBeTrue();
+
+    $machine->buy(Product::Water);
+
+    expect($machine->isAvailable(Product::Water))->toBeFalse();
+});
+
 it('sells a product, dispenses it with change and clears the balance', function () {
     $machine = machineWith(waterStock: 1, coins: [[Coin::TwentyFiveCents, 1], [Coin::TenCents, 1]]);
     $machine->insertCoin(Coin::OneEuro);

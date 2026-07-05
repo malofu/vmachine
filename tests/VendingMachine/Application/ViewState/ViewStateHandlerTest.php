@@ -26,7 +26,7 @@ function stateRepository(): InMemoryVendingMachineRepository
     return $repository;
 }
 
-it('reports the inserted balance and every product with its price and stock', function () {
+it('reports the inserted balance and every product with its price and availability', function () {
     $repository = stateRepository();
     (new InsertCoinHandler($repository))(new InsertCoinCommand(25));
 
@@ -39,13 +39,13 @@ it('reports the inserted balance and every product with its price and stock', fu
 
     expect($water->selector)->toBe('WATER')
         ->and($water->priceInCents)->toBe(65)
-        ->and($water->stock)->toBe(3)
+        ->and($water->available)->toBeTrue()
         ->and($juice->selector)->toBe('JUICE')
         ->and($juice->priceInCents)->toBe(100)
-        ->and($juice->stock)->toBe(1)
+        ->and($juice->available)->toBeTrue()
         ->and($soda->selector)->toBe('SODA')
         ->and($soda->priceInCents)->toBe(150)
-        ->and($soda->stock)->toBe(0);
+        ->and($soda->available)->toBeFalse();
 });
 
 it('reports a zero balance when no coins have been inserted', function () {
