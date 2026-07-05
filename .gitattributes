@@ -1,0 +1,4 @@
+# Normalize line endings to LF in the repo and on every checkout,
+# so Windows and UNIX hosts stay byte-identical and scripts run
+# cleanly inside the Linux container.
+* text=auto eol=lf
