@@ -20,6 +20,9 @@ jobs:
       - name: Install dependencies
         run: composer install --prefer-dist --no-progress
 
+      - name: Code style (php-cs-fixer, PSR-12)
+        run: composer cs
+
       - name: Static analysis (PHPStan)
         run: composer stan
 
