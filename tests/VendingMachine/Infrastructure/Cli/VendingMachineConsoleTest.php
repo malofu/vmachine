@@ -5,6 +5,7 @@ declare(strict_types=1);
 use VendingMachine\Application\BuyProduct\BuyProductHandler;
 use VendingMachine\Application\InsertCoin\InsertCoinHandler;
 use VendingMachine\Application\ReturnCoins\ReturnCoinsHandler;
+use VendingMachine\Application\ViewState\ViewStateHandler;
 use VendingMachine\Domain\Coin;
 use VendingMachine\Domain\CoinBank;
 use VendingMachine\Domain\Inventory;
@@ -50,6 +51,7 @@ function runConsoleWith(string $input, ?VendingMachine $machine = null): string
         new InsertCoinHandler($repository),
         new ReturnCoinsHandler($repository),
         new BuyProductHandler($repository),
+        new ViewStateHandler($repository),
         $in,
         $out,
     );
@@ -72,6 +74,12 @@ it('lists the products it sells on start', function () {
     $output = runConsoleWith("exit\n");
 
     expect($output)->toContain("Type 'get <product>' to buy. Products: WATER (0.65), JUICE (1.00), SODA (1.50).");
+});
+
+it('offers the state command on start', function () {
+    $output = runConsoleWith("exit\n");
+
+    expect($output)->toContain("Type 'state' to see your balance, the products and their stock.");
 });
 
 it('echoes the running balance as coins are inserted', function () {
@@ -159,4 +167,21 @@ it('reports an unknown product and lists the ones it sells', function () {
     $output = runConsoleWith("get cola\nexit\n");
 
     expect($output)->toContain('Unknown product: "cola". Available: WATER (0.65), JUICE (1.00), SODA (1.50).');
+});
+
+it('shows the balance, products and stock on request', function () {
+    $output = runConsoleWith("0.25\nstate\nexit\n");
+
+    expect($output)->toContain('Balance: 0.25')
+        ->and($output)->toContain('Products:')
+        ->and($output)->toContain('- WATER (0.65): 2 in stock')
+        ->and($output)->toContain('- JUICE (1.00): 1 in stock')
+        ->and($output)->toContain('- SODA (1.50): 1 in stock');
+});
+
+it('reflects a purchase in the state it reports afterwards', function () {
+    $output = runConsoleWith("1\nget water\nstate\nexit\n");
+
+    expect($output)->toContain('Balance: 0.00')
+        ->and($output)->toContain('- WATER (0.65): 1 in stock');
 });
