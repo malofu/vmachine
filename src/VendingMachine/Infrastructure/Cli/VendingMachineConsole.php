@@ -316,7 +316,7 @@ final class VendingMachineConsole
         }
 
         $this->writeln(sprintf(
-            'Unrecognised service command: "%s". Use stock <product> <count>, change <coin> <count>, state, apply or close.',
+            'Unrecognised service command: "%s". Use stock <product> <count>, change <coin> <count>, state, apply or exit.',
             $entry,
         ));
     }

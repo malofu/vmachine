@@ -7,6 +7,7 @@
         "php": "^8.3"
     },
     "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.95",
         "pestphp/pest": "^3.0",
         "phpstan/phpstan": "^2.0"
     },
@@ -28,6 +29,8 @@
     },
     "scripts": {
         "test": "pest",
-        "stan": "phpstan analyse"
+        "stan": "phpstan analyse",
+        "cs": "php-cs-fixer fix --dry-run --diff",
+        "cs:fix": "php-cs-fixer fix"
     }
 }
