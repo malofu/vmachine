@@ -10,6 +10,8 @@ use VendingMachine\Application\InsertCoin\InsertCoinCommand;
 use VendingMachine\Application\InsertCoin\InsertCoinHandler;
 use VendingMachine\Application\ReturnCoins\ReturnCoinsCommand;
 use VendingMachine\Application\ReturnCoins\ReturnCoinsHandler;
+use VendingMachine\Application\ViewState\ViewStateCommand;
+use VendingMachine\Application\ViewState\ViewStateHandler;
 use VendingMachine\Domain\CannotMakeChangeException;
 use VendingMachine\Domain\Coin;
 use VendingMachine\Domain\InsufficientMoneyException;
@@ -45,6 +47,7 @@ final class VendingMachineConsole
         private readonly InsertCoinHandler $insertCoin,
         private readonly ReturnCoinsHandler $returnCoins,
         private readonly BuyProductHandler $buyProduct,
+        private readonly ViewStateHandler $viewState,
         $input = STDIN,
         $output = STDOUT,
     ) {
@@ -55,6 +58,7 @@ final class VendingMachineConsole
     public function run(): void
     {
         $this->greet();
+        $this->handleState();
 
         while (($line = fgets($this->input)) !== false) {
             $entry = trim($line);
@@ -71,6 +75,12 @@ final class VendingMachineConsole
 
             if (in_array($command, ['return', 'return-coin'], true)) {
                 $this->handleReturn();
+
+                continue;
+            }
+
+            if ($command === 'state') {
+                $this->handleState();
 
                 continue;
             }
@@ -136,6 +146,29 @@ final class VendingMachineConsole
     }
 
     /**
+     * Shows the customer where they stand: the money inserted so far and, for
+     * every product, its price and whether it can be bought right now. A
+     * read-only query — it leaves the machine untouched.
+     */
+    private function handleState(): void
+    {
+        $response = ($this->viewState)(new ViewStateCommand());
+        $this->balanceInCents = $response->balanceInCents;
+
+        $this->writeln(sprintf('Balance: %s', $this->format($response->balanceInCents)));
+        $this->writeln('Products:');
+
+        foreach ($response->products as $product) {
+            $this->writeln(sprintf(
+                '- %s (%s): %s',
+                $product->selector,
+                $this->format($product->priceInCents),
+                $product->available ? 'available' : 'sold out',
+            ));
+        }
+    }
+
+    /**
      * Attempts to buy a product. On success the item is dispensed with any
      * change; on any rule violation the balance is left untouched so the
      * customer can add more coins or ask for their money back.
@@ -180,13 +213,22 @@ final class VendingMachineConsole
         }
     }
 
+    /**
+     * Orients the customer on how to drive the machine — accepted coins and the
+     * available commands. What the machine currently holds (products, prices,
+     * availability) is the job of 'state', which is shown right after this.
+     */
     private function greet(): void
     {
         $this->writeln('Vending Machine');
-        $this->writeln(sprintf('Insert coins one at a time. Accepted coins: %s.', $this->acceptedCoins()));
-        $this->writeln(sprintf("Type 'get <product>' to buy. Products: %s.", $this->availableProducts()));
-        $this->writeln("Type 'return' to get your coins back.");
-        $this->writeln("Type 'exit' to quit.");
+        $this->writeln(sprintf('Accepted coins: %s.', $this->acceptedCoins()));
+        $this->writeln('Commands:');
+        $this->writeln('  <coin>         insert a coin (e.g. 0.25)');
+        $this->writeln('  get <product>  buy a product (e.g. get water)');
+        $this->writeln('  return         return your inserted coins');
+        $this->writeln('  state          show balance, products, prices and availability');
+        $this->writeln('  exit           quit');
+        $this->writeln('');
     }
 
     /**

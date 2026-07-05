@@ -6,6 +6,7 @@ declare(strict_types=1);
 use VendingMachine\Application\BuyProduct\BuyProductHandler;
 use VendingMachine\Application\InsertCoin\InsertCoinHandler;
 use VendingMachine\Application\ReturnCoins\ReturnCoinsHandler;
+use VendingMachine\Application\ViewState\ViewStateHandler;
 use VendingMachine\Domain\Coin;
 use VendingMachine\Domain\CoinBank;
 use VendingMachine\Domain\Inventory;
@@ -37,6 +38,7 @@ $console = new VendingMachineConsole(
     new InsertCoinHandler($repository),
     new ReturnCoinsHandler($repository),
     new BuyProductHandler($repository),
+    new ViewStateHandler($repository),
 );
 
 $console->run();

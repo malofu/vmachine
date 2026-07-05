@@ -93,6 +93,16 @@ final class VendingMachine
         return $this->insertedMoney->total();
     }
 
+    /**
+     * Whether the product can be bought right now. This is what a customer is
+     * shown; the exact remaining count is stock detail the service technician
+     * cares about, not the customer.
+     */
+    public function isAvailable(Product $product): bool
+    {
+        return $this->inventory->has($product);
+    }
+
     public function stockOf(Product $product): int
     {
         return $this->inventory->countOf($product);

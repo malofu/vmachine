@@ -5,6 +5,7 @@ declare(strict_types=1);
 use VendingMachine\Application\BuyProduct\BuyProductHandler;
 use VendingMachine\Application\InsertCoin\InsertCoinHandler;
 use VendingMachine\Application\ReturnCoins\ReturnCoinsHandler;
+use VendingMachine\Application\ViewState\ViewStateHandler;
 use VendingMachine\Domain\Coin;
 use VendingMachine\Domain\CoinBank;
 use VendingMachine\Domain\Inventory;
@@ -50,6 +51,7 @@ function runConsoleWith(string $input, ?VendingMachine $machine = null): string
         new InsertCoinHandler($repository),
         new ReturnCoinsHandler($repository),
         new BuyProductHandler($repository),
+        new ViewStateHandler($repository),
         $in,
         $out,
     );
@@ -65,13 +67,23 @@ function runConsoleWith(string $input, ?VendingMachine $machine = null): string
 it('greets with the accepted coins on start', function () {
     $output = runConsoleWith("exit\n");
 
-    expect($output)->toContain('Insert coins one at a time. Accepted coins: 0.05, 0.10, 0.25, 1.00.');
+    expect($output)->toContain('Accepted coins: 0.05, 0.10, 0.25, 1.00.');
 });
 
-it('lists the products it sells on start', function () {
+it('offers the state command on start', function () {
     $output = runConsoleWith("exit\n");
 
-    expect($output)->toContain("Type 'get <product>' to buy. Products: WATER (0.65), JUICE (1.00), SODA (1.50).");
+    expect($output)->toContain('state')
+        ->and($output)->toContain('show balance, products, prices and availability');
+});
+
+it('shows the machine state on start so the customer sees the catalogue', function () {
+    $output = runConsoleWith("exit\n");
+
+    expect($output)->toContain('Balance: 0.00')
+        ->and($output)->toContain('- WATER (0.65): available')
+        ->and($output)->toContain('- JUICE (1.00): available')
+        ->and($output)->toContain('- SODA (1.50): available');
 });
 
 it('echoes the running balance as coins are inserted', function () {
@@ -159,4 +171,36 @@ it('reports an unknown product and lists the ones it sells', function () {
     $output = runConsoleWith("get cola\nexit\n");
 
     expect($output)->toContain('Unknown product: "cola". Available: WATER (0.65), JUICE (1.00), SODA (1.50).');
+});
+
+it('shows the balance, products, prices and availability on request', function () {
+    $machine = VendingMachine::stocked(
+        Inventory::empty()
+            ->withStock(Product::Water, 2)
+            ->withStock(Product::Juice, 1)
+            ->withStock(Product::Soda, 0),
+        CoinBank::empty(),
+    );
+
+    $output = runConsoleWith("0.25\nstate\nexit\n", $machine);
+
+    expect($output)->toContain('Balance: 0.25')
+        ->and($output)->toContain('Products:')
+        ->and($output)->toContain('- WATER (0.65): available')
+        ->and($output)->toContain('- JUICE (1.00): available')
+        ->and($output)->toContain('- SODA (1.50): sold out');
+});
+
+it('reflects a purchase in the state it reports afterwards', function () {
+    $machine = VendingMachine::stocked(
+        Inventory::empty()->withStock(Product::Water, 1),
+        CoinBank::empty()
+            ->withCoins(Coin::TwentyFiveCents, 1)
+            ->withCoins(Coin::TenCents, 1),
+    );
+
+    $output = runConsoleWith("1\nget water\nstate\nexit\n", $machine);
+
+    expect($output)->toContain('Dispensed: WATER')
+        ->and($output)->toContain('- WATER (0.65): sold out');
 });
