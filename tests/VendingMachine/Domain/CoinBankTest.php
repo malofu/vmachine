@@ -9,6 +9,13 @@ it('holds nothing when empty', function () {
     expect(CoinBank::empty()->total())->toBe(0);
 });
 
+it('reports how many coins of a denomination it holds', function () {
+    $bank = CoinBank::empty()->withCoins(Coin::TwentyFiveCents, 4);
+
+    expect($bank->countOf(Coin::TwentyFiveCents))->toBe(4)
+        ->and($bank->countOf(Coin::OneEuro))->toBe(0);
+});
+
 it('totals the coins it holds', function () {
     $bank = CoinBank::empty()
         ->withCoins(Coin::OneEuro, 2)

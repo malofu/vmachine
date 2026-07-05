@@ -5,6 +5,7 @@ declare(strict_types=1);
 use VendingMachine\Application\BuyProduct\BuyProductHandler;
 use VendingMachine\Application\InsertCoin\InsertCoinHandler;
 use VendingMachine\Application\ReturnCoins\ReturnCoinsHandler;
+use VendingMachine\Application\ServiceMachine\ServiceMachineHandler;
 use VendingMachine\Application\ViewState\ViewStateHandler;
 use VendingMachine\Domain\Coin;
 use VendingMachine\Domain\CoinBank;
@@ -36,7 +37,7 @@ function stockedMachine(): VendingMachine
 /**
  * Drives the REPL end-to-end over in-memory streams and returns what it wrote.
  */
-function runConsoleWith(string $input, ?VendingMachine $machine = null): string
+function runConsoleWith(string $input, ?VendingMachine $machine = null, string $serviceCode = '1234'): string
 {
     $in = fopen('php://memory', 'r+');
     $out = fopen('php://memory', 'r+');
@@ -52,6 +53,8 @@ function runConsoleWith(string $input, ?VendingMachine $machine = null): string
         new ReturnCoinsHandler($repository),
         new BuyProductHandler($repository),
         new ViewStateHandler($repository),
+        new ServiceMachineHandler($repository),
+        $serviceCode,
         $in,
         $out,
     );
@@ -203,4 +206,86 @@ it('reflects a purchase in the state it reports afterwards', function () {
 
     expect($output)->toContain('Dispensed: WATER')
         ->and($output)->toContain('- WATER (0.65): sold out');
+});
+
+it('refuses service mode when the code is wrong and keeps the customer out', function () {
+    $output = runConsoleWith("service\n0000\nexit\n");
+
+    expect($output)->toContain('Access denied.')
+        ->and($output)->not->toContain('Service mode.');
+});
+
+it('does not honour service commands without unlocking service mode', function () {
+    $machine = VendingMachine::stocked(
+        Inventory::empty()->withStock(Product::Water, 0),
+        CoinBank::empty(),
+    );
+
+    $output = runConsoleWith("stock water 5\nstate\nexit\n", $machine);
+
+    // 'stock water 5' is not a customer command; it must not refill anything.
+    expect($output)->toContain('Unrecognised input: "stock water 5"')
+        ->and($output)->toContain('- WATER (0.65): sold out');
+});
+
+it('enters service mode with the right code and shows the technician view', function () {
+    $output = runConsoleWith("service\n1234\nclose\nexit\n");
+
+    expect($output)->toContain('Service mode.')
+        ->and($output)->toContain('Stock:')
+        ->and($output)->toContain('- WATER (0.65): 2')
+        ->and($output)->toContain('Change:')
+        ->and($output)->toContain('- 1.00: 5')
+        ->and($output)->toContain('Total change: 9.00');
+});
+
+it('refills stock and change on apply, reflected in the technician view', function () {
+    $machine = VendingMachine::stocked(
+        Inventory::empty()->withStock(Product::Water, 0),
+        CoinBank::empty(),
+    );
+
+    $output = runConsoleWith(
+        "service\n1234\nstock water 5\nchange 0.25 8\napply\nstate\nclose\nexit\n",
+        $machine,
+    );
+
+    expect($output)->toContain('Applied.')
+        ->and($output)->toContain('- WATER (0.65): 5')
+        ->and($output)->toContain('- 0.25: 8')
+        ->and($output)->toContain('Total change: 2.00');
+});
+
+it('makes a refilled product buyable again for the customer', function () {
+    $machine = VendingMachine::stocked(
+        Inventory::empty()->withStock(Product::Water, 0),
+        CoinBank::empty(),
+    );
+
+    // Sold out at first; the technician refills Water and loads exact-change coins,
+    // then the customer buys it.
+    $output = runConsoleWith(
+        "service\n1234\nstock water 1\nchange 0.25 1\nchange 0.10 1\napply\nclose\n1\nget water\nexit\n",
+        $machine,
+    );
+
+    expect($output)->toContain('Service closed.')
+        ->and($output)->toContain('- WATER (0.65): available')
+        ->and($output)->toContain('Dispensed: WATER. Change: 0.25, 0.10. Balance: 0.00');
+});
+
+it('reports a bad entry on apply and changes nothing', function () {
+    $machine = VendingMachine::stocked(
+        Inventory::empty()->withStock(Product::Water, 0),
+        CoinBank::empty(),
+    );
+
+    $output = runConsoleWith(
+        "service\n1234\nstock cola 5\napply\nstate\nclose\nexit\n",
+        $machine,
+    );
+
+    expect($output)->toContain('Cannot apply:')
+        ->and($output)->toContain('Nothing changed.')
+        ->and($output)->toContain('- WATER (0.65): 0');
 });
