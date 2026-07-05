@@ -408,6 +408,7 @@ final class VendingMachineConsole
         $this->writeln('  get <product>  buy a product (e.g. get water)');
         $this->writeln('  return         return your inserted coins');
         $this->writeln('  state          show balance, products, prices and availability');
+        $this->writeln('  service        technician service mode');
         $this->writeln('  exit           quit');
         $this->writeln('');
     }
