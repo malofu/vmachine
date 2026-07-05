@@ -8,8 +8,9 @@ use VendingMachine\Domain\Product;
 use VendingMachine\Domain\VendingMachineRepository;
 
 /**
- * Reports the current state of the machine: the customer's inserted balance and,
- * for every product in the catalogue, its price and remaining stock.
+ * Reports the current state of the machine as a customer sees it: the inserted
+ * balance and, for every product in the catalogue, its price and whether it can
+ * be bought right now.
  *
  * This is a pure query — it never mutates the machine, so nothing is saved. The
  * catalogue is sourced from the Product enum so the domain stays the single
@@ -29,7 +30,7 @@ final readonly class ViewStateHandler
             static fn (Product $product): ProductState => new ProductState(
                 $product->selector(),
                 $product->price(),
-                $machine->stockOf($product),
+                $machine->isAvailable($product),
             ),
             Product::cases(),
         );
