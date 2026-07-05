@@ -1,5 +1,7 @@
 TASK.md
 
+.env
+
 /vendor/
 /.phpunit.cache/
 .phpunit.result.cache

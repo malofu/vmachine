@@ -62,6 +62,24 @@ it('returns nothing when no coins were inserted', function () {
         ->and($machine->insertedBalance())->toBe(0);
 });
 
+it('sets an absolute item count when serviced', function () {
+    $machine = machineWith(waterStock: 0, coins: []);
+
+    $machine->setStock(Product::Water, 5);
+
+    expect($machine->stockOf(Product::Water))->toBe(5)
+        ->and($machine->isAvailable(Product::Water))->toBeTrue();
+});
+
+it('sets an absolute coin count for change when serviced', function () {
+    $machine = machineWith(waterStock: 0, coins: []);
+
+    $machine->setChange(Coin::TwentyFiveCents, 8);
+
+    expect($machine->coinStockOf(Coin::TwentyFiveCents))->toBe(8)
+        ->and($machine->changeAvailable())->toBe(200);
+});
+
 it('reports a product as available while it has stock and sold out once empty', function () {
     $machine = machineWith(waterStock: 1, coins: []);
     $machine->insertCoin(Coin::TwentyFiveCents);

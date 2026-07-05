@@ -108,8 +108,31 @@ final class VendingMachine
         return $this->inventory->countOf($product);
     }
 
+    public function coinStockOf(Coin $coin): int
+    {
+        return $this->coinBank->countOf($coin);
+    }
+
     public function changeAvailable(): int
     {
         return $this->coinBank->total();
+    }
+
+    /**
+     * Refills a product to an absolute count. The service technician's operation,
+     * gated at the adapter; the aggregate trusts it is only reached by a servicer.
+     */
+    public function setStock(Product $product, int $count): void
+    {
+        $this->inventory = $this->inventory->withStock($product, $count);
+    }
+
+    /**
+     * Sets the number of coins of a denomination the machine holds for change,
+     * to an absolute count. Like {@see setStock()}, a servicing operation.
+     */
+    public function setChange(Coin $coin, int $count): void
+    {
+        $this->coinBank = $this->coinBank->withCoins($coin, $count);
     }
 }
