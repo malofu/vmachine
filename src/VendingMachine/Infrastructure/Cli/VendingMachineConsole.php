@@ -58,6 +58,7 @@ final class VendingMachineConsole
     public function run(): void
     {
         $this->greet();
+        $this->handleState();
 
         while (($line = fgets($this->input)) !== false) {
             $entry = trim($line);
@@ -78,7 +79,7 @@ final class VendingMachineConsole
                 continue;
             }
 
-            if (in_array($command, ['state', 'status'], true)) {
+            if ($command === 'state') {
                 $this->handleState();
 
                 continue;
@@ -146,8 +147,8 @@ final class VendingMachineConsole
 
     /**
      * Shows the customer where they stand: the money inserted so far and, for
-     * every product, its price and how many are left. A read-only query — it
-     * leaves the machine untouched.
+     * every product, its price and whether it can be bought right now. A
+     * read-only query — it leaves the machine untouched.
      */
     private function handleState(): void
     {
@@ -159,10 +160,10 @@ final class VendingMachineConsole
 
         foreach ($response->products as $product) {
             $this->writeln(sprintf(
-                '- %s (%s): %d in stock',
+                '- %s (%s): %s',
                 $product->selector,
                 $this->format($product->priceInCents),
-                $product->stock,
+                $product->available ? 'available' : 'sold out',
             ));
         }
     }
@@ -212,14 +213,22 @@ final class VendingMachineConsole
         }
     }
 
+    /**
+     * Orients the customer on how to drive the machine — accepted coins and the
+     * available commands. What the machine currently holds (products, prices,
+     * availability) is the job of 'state', which is shown right after this.
+     */
     private function greet(): void
     {
         $this->writeln('Vending Machine');
-        $this->writeln(sprintf('Insert coins one at a time. Accepted coins: %s.', $this->acceptedCoins()));
-        $this->writeln(sprintf("Type 'get <product>' to buy. Products: %s.", $this->availableProducts()));
-        $this->writeln("Type 'return' to get your coins back.");
-        $this->writeln("Type 'state' to see your balance, the products and their stock.");
-        $this->writeln("Type 'exit' to quit.");
+        $this->writeln(sprintf('Accepted coins: %s.', $this->acceptedCoins()));
+        $this->writeln('Commands:');
+        $this->writeln('  <coin>         insert a coin (e.g. 0.25)');
+        $this->writeln('  get <product>  buy a product (e.g. get water)');
+        $this->writeln('  return         return your inserted coins');
+        $this->writeln('  state          show balance, products, prices and availability');
+        $this->writeln('  exit           quit');
+        $this->writeln('');
     }
 
     /**
