@@ -17,7 +17,8 @@ the **coin-bank composition**.
    (simulating the technician's physical key). A customer at the machine cannot service it.
 2. **One batch use case** — `ServiceMachine` applies the whole desired setup (item counts + coin
    counts) atomically, matching *"opens the machine and sets everything."*
-3. **Command words** — `service` / `stock` / `change` / `state` / `apply` / `close`.
+3. **Command words** — `service` / `stock` / `change` / `state` / `apply`, and `exit` to leave
+   service mode (same word the customer mode uses to leave).
 4. **Non-negative counts** — enforced at the CLI parser (only non-negative integers accepted), so the
    domain needs no new exception.
 
@@ -96,7 +97,7 @@ on the catalogue and the denominations.
     change <coin> <count>     accumulate a coin count into the pending setup      (e.g. change 0.25 20)
     state                     technician view: per-product counts, per-coin counts, total change
     apply                     commit the pending setup atomically, show the report, clear the draft
-    close                     leave service mode (a non-empty un-applied draft is discarded, with a note)
+    exit                      leave service mode (a non-empty un-applied draft is discarded, with a note)
     ```
   - `stock` / `change` only parse and stage input (non-negative integer count; coin as a decimal →
     cents). Whether a selector/denomination is *valid* is decided by the handler on `apply`, which
@@ -124,7 +125,7 @@ on the catalogue and the denominations.
 2. `docker compose exec -T app composer stan` → PHPStan level max clean.
 3. Manual REPL smoke test:
    ```
-   printf 'service\n<code>\nstock water 2\nchange 0.25 10\napply\nstate\nclose\nget water\nexit\n' \
+   printf 'service\n<code>\nstock water 2\nchange 0.25 10\napply\nstate\nexit\nget water\nexit\n' \
      | docker compose exec -T app php bin/vending-machine
    ```
    Expect: enter service mode, apply refills the machine, the technician `state` shows the new

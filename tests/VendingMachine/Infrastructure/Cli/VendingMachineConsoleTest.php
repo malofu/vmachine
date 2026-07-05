@@ -229,7 +229,7 @@ it('does not honour service commands without unlocking service mode', function (
 });
 
 it('enters service mode with the right code and shows the technician view', function () {
-    $output = runConsoleWith("service\n1234\nclose\nexit\n");
+    $output = runConsoleWith("service\n1234\nexit\nexit\n");
 
     expect($output)->toContain('Service mode.')
         ->and($output)->toContain('Stock:')
@@ -246,7 +246,7 @@ it('refills stock and change on apply, reflected in the technician view', functi
     );
 
     $output = runConsoleWith(
-        "service\n1234\nstock water 5\nchange 0.25 8\napply\nstate\nclose\nexit\n",
+        "service\n1234\nstock water 5\nchange 0.25 8\napply\nstate\nexit\nexit\n",
         $machine,
     );
 
@@ -265,7 +265,7 @@ it('makes a refilled product buyable again for the customer', function () {
     // Sold out at first; the technician refills Water and loads exact-change coins,
     // then the customer buys it.
     $output = runConsoleWith(
-        "service\n1234\nstock water 1\nchange 0.25 1\nchange 0.10 1\napply\nclose\n1\nget water\nexit\n",
+        "service\n1234\nstock water 1\nchange 0.25 1\nchange 0.10 1\napply\nexit\n1\nget water\nexit\n",
         $machine,
     );
 
@@ -281,7 +281,7 @@ it('reports a bad entry on apply and changes nothing', function () {
     );
 
     $output = runConsoleWith(
-        "service\n1234\nstock cola 5\napply\nstate\nclose\nexit\n",
+        "service\n1234\nstock cola 5\napply\nstate\nexit\nexit\n",
         $machine,
     );
 

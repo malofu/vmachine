@@ -265,7 +265,7 @@ final class VendingMachineConsole
         $this->serviceMode = true;
         $this->pendingProductCounts = [];
         $this->pendingCoinCounts = [];
-        $this->writeln('Service mode. Commands: stock <product> <count>, change <coin> <count>, state, apply, close.');
+        $this->writeln('Service mode. Commands: stock <product> <count>, change <coin> <count>, state, apply, exit.');
         $this->showServiceState();
     }
 
@@ -275,8 +275,8 @@ final class VendingMachineConsole
      */
     private function handleServiceEntry(string $entry, string $command): void
     {
-        if ($command === 'close') {
-            $this->closeServiceMode();
+        if (in_array($command, ['exit', 'quit'], true)) {
+            $this->exitServiceMode();
 
             return;
         }
@@ -349,7 +349,7 @@ final class VendingMachineConsole
      * Leaves service mode, discarding any staged-but-unapplied setup, and shows
      * the customer face again.
      */
-    private function closeServiceMode(): void
+    private function exitServiceMode(): void
     {
         if ($this->pendingProductCounts !== [] || $this->pendingCoinCounts !== []) {
             $this->writeln('Discarded un-applied changes.');
