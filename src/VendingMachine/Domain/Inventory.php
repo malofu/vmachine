@@ -61,6 +61,16 @@ final class Inventory
     }
 
     /**
+     * The stock as a plain map, for a repository to snapshot.
+     *
+     * @return array<string, int> product selector => remaining count
+     */
+    public function counts(): array
+    {
+        return $this->stock;
+    }
+
+    /**
      * Hands out one unit of the product, returning the reduced inventory.
      *
      * Guards its own invariant: the aggregate is expected to check {@see has()}

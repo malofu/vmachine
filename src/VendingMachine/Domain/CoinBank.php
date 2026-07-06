@@ -62,6 +62,16 @@ final class CoinBank
         return $this->coins[$coin->cents()] ?? 0;
     }
 
+    /**
+     * The held coins as a plain map, for a repository to snapshot.
+     *
+     * @return array<int, int> denomination in cents => count held
+     */
+    public function counts(): array
+    {
+        return $this->coins;
+    }
+
     public function total(): int
     {
         $total = 0;
