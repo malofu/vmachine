@@ -82,3 +82,11 @@ it('returns null when it does not hold enough coins', function () {
 
     expect($bank->withdraw(30))->toBeNull();
 });
+
+it('exposes its coins as a cents-keyed map for a repository to snapshot', function () {
+    $bank = CoinBank::empty()
+        ->withCoins(Coin::OneEuro, 2)
+        ->withCoins(Coin::FiveCents, 7);
+
+    expect($bank->counts())->toBe([100 => 2, 5 => 7]);
+});
