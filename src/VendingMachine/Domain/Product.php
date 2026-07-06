@@ -5,35 +5,44 @@ declare(strict_types=1);
 namespace VendingMachine\Domain;
 
 /**
- * The products the machine sells, identified by their selector.
+ * A product the machine sells: a selector and a price (in cents).
  *
- * Like {@see Coin}, this is an enum so an unknown product is unrepresentable:
- * the only way to obtain a Product is one of these cases. Each case owns its
- * price (in cents), keeping the catalogue and its prices in one place.
+ * Products used to be a closed enum; they are now runtime data the technician
+ * manages, so a Product is an immutable value object built through {@see new()},
+ * which guards the invariants an enum case gave us for free — a non-empty,
+ * normalized selector and a positive price. The set of products a machine
+ * actually sells lives in the {@see ProductCatalogue}.
  */
-enum Product: string
+final class Product
 {
-    case Water = 'WATER';
-    case Juice = 'JUICE';
-    case Soda = 'SODA';
-
-    public static function fromSelector(string $selector): self
-    {
-        return self::tryFrom(strtoupper($selector))
-            ?? throw UnknownProductException::forSelector($selector);
+    private function __construct(
+        private readonly string $selector,
+        private readonly int $priceInCents,
+    ) {
     }
 
-    public function price(): int
+    public static function new(string $selector, int $priceInCents): self
     {
-        return match ($this) {
-            self::Water => 65,
-            self::Juice => 100,
-            self::Soda => 150,
-        };
+        $selector = strtoupper(trim($selector));
+
+        if ($selector === '') {
+            throw InvalidProductException::emptySelector();
+        }
+
+        if ($priceInCents <= 0) {
+            throw InvalidProductException::nonPositivePrice($priceInCents);
+        }
+
+        return new self($selector, $priceInCents);
     }
 
     public function selector(): string
     {
-        return $this->value;
+        return $this->selector;
+    }
+
+    public function price(): int
+    {
+        return $this->priceInCents;
     }
 }

@@ -13,8 +13,8 @@ use VendingMachine\Domain\VendingMachineRepository;
  * be bought right now.
  *
  * This is a pure query — it never mutates the machine, so nothing is saved. The
- * catalogue is sourced from the Product enum so the domain stays the single
- * authority on what the machine sells.
+ * catalogue is sourced from the machine itself so it stays the single authority
+ * on what it sells.
  */
 final readonly class ViewStateHandler
 {
@@ -30,9 +30,9 @@ final readonly class ViewStateHandler
             static fn (Product $product): ProductState => new ProductState(
                 $product->selector(),
                 $product->price(),
-                $machine->isAvailable($product),
+                $machine->isAvailable($product->selector()),
             ),
-            Product::cases(),
+            $machine->catalogue()->all(),
         );
 
         return new ViewStateResponse($machine->insertedBalance(), $products);

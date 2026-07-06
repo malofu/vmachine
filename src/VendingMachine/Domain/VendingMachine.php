@@ -6,12 +6,14 @@ namespace VendingMachine\Domain;
 
 /**
  * The machine as a whole: it holds the money the customer has inserted, the
- * product inventory and the coin bank, and enforces the rules of a sale.
+ * product catalogue, the stock inventory and the coin bank, and enforces the
+ * rules of a sale.
  */
 final class VendingMachine
 {
     private function __construct(
         private InsertedMoney $insertedMoney,
+        private ProductCatalogue $catalogue,
         private Inventory $inventory,
         private CoinBank $coinBank,
     ) {
@@ -19,17 +21,37 @@ final class VendingMachine
 
     public static function new(): self
     {
-        return new self(InsertedMoney::none(), Inventory::empty(), CoinBank::empty());
+        return new self(
+            InsertedMoney::none(),
+            ProductCatalogue::empty(),
+            Inventory::empty(),
+            CoinBank::empty(),
+        );
     }
 
     /**
-     * Builds a machine already loaded with stock and change. The seam through
-     * which the machine is initially provisioned (today from the CLI bootstrap,
-     * later by the service technician).
+     * Builds a machine already loaded with a catalogue, stock and change. The
+     * seam through which the machine is initially provisioned (today from the CLI
+     * bootstrap, and by the service technician).
      */
-    public static function stocked(Inventory $inventory, CoinBank $coinBank): self
+    public static function stocked(ProductCatalogue $catalogue, Inventory $inventory, CoinBank $coinBank): self
     {
-        return new self(InsertedMoney::none(), $inventory, $coinBank);
+        return new self(InsertedMoney::none(), $catalogue, $inventory, $coinBank);
+    }
+
+    /**
+     * Reconstitutes a machine from persisted state. Unlike {@see stocked()},
+     * which starts a fresh customer session, this carries the inserted money
+     * through, so a machine reloaded from a store resumes exactly where it left
+     * off. The seam a persistence adapter rebuilds the aggregate through.
+     */
+    public static function restore(
+        ProductCatalogue $catalogue,
+        Inventory $inventory,
+        CoinBank $coinBank,
+        InsertedMoney $insertedMoney,
+    ): self {
+        return new self($insertedMoney, $catalogue, $inventory, $coinBank);
     }
 
     public function insertCoin(Coin $coin): void
@@ -52,17 +74,22 @@ final class VendingMachine
     /**
      * Sells a product: dispenses it and returns any change owed.
      *
-     * The rules are checked in order and the machine is only mutated once all
-     * of them hold, so a failed purchase leaves the inserted money untouched —
-     * the customer keeps their credit and can retry or ask for it back.
+     * Resolving the selector is the first sale rule — an unknown selection is
+     * rejected here. The remaining rules are checked in order and the machine is
+     * only mutated once all of them hold, so a failed purchase leaves the
+     * inserted money untouched — the customer keeps their credit and can retry or
+     * ask for it back.
      *
-     * @throws OutOfStockException          when the product is sold out
-     * @throws InsufficientMoneyException   when the inserted money is too little
-     * @throws CannotMakeChangeException    when exact change cannot be composed
+     * @throws UnknownProductException       when the selector names no product
+     * @throws OutOfStockException           when the product is sold out
+     * @throws InsufficientMoneyException    when the inserted money is too little
+     * @throws CannotMakeChangeException     when exact change cannot be composed
      */
-    public function buy(Product $product): Sale
+    public function buy(string $selector): Sale
     {
-        if (!$this->inventory->has($product)) {
+        $product = $this->catalogue->get($selector);
+
+        if (!$this->inventory->has($product->selector())) {
             throw OutOfStockException::forProduct($product);
         }
 
@@ -82,7 +109,7 @@ final class VendingMachine
         }
 
         [$this->coinBank, $change] = $withdrawal;
-        $this->inventory = $this->inventory->dispense($product);
+        $this->inventory = $this->inventory->dispense($product->selector());
         $this->insertedMoney = InsertedMoney::none();
 
         return new Sale($product, $change);
@@ -94,18 +121,53 @@ final class VendingMachine
     }
 
     /**
+     * The catalogue of products the machine sells, for read models and the
+     * technician view.
+     */
+    public function catalogue(): ProductCatalogue
+    {
+        return $this->catalogue;
+    }
+
+    /**
+     * The stock inventory, exposed for a repository to snapshot. Immutable, like
+     * the catalogue — handing it out cannot mutate the machine.
+     */
+    public function inventory(): Inventory
+    {
+        return $this->inventory;
+    }
+
+    /**
+     * The coin bank, exposed for a repository to snapshot.
+     */
+    public function coinBank(): CoinBank
+    {
+        return $this->coinBank;
+    }
+
+    /**
+     * The money the customer has inserted so far, exposed for a repository to
+     * snapshot.
+     */
+    public function insertedMoney(): InsertedMoney
+    {
+        return $this->insertedMoney;
+    }
+
+    /**
      * Whether the product can be bought right now. This is what a customer is
      * shown; the exact remaining count is stock detail the service technician
      * cares about, not the customer.
      */
-    public function isAvailable(Product $product): bool
+    public function isAvailable(string $selector): bool
     {
-        return $this->inventory->has($product);
+        return $this->inventory->has($selector);
     }
 
-    public function stockOf(Product $product): int
+    public function stockOf(string $selector): int
     {
-        return $this->inventory->countOf($product);
+        return $this->inventory->countOf($selector);
     }
 
     public function coinStockOf(Coin $coin): int
@@ -119,12 +181,46 @@ final class VendingMachine
     }
 
     /**
-     * Refills a product to an absolute count. The service technician's operation,
-     * gated at the adapter; the aggregate trusts it is only reached by a servicer.
+     * Defines a product or reprices an existing one. The service technician's
+     * operation, gated at the adapter; the aggregate trusts it is only reached by
+     * a servicer.
      */
-    public function setStock(Product $product, int $count): void
+    public function setProduct(Product $product): void
     {
-        $this->inventory = $this->inventory->withStock($product, $count);
+        $this->catalogue = $this->catalogue->withProduct($product);
+    }
+
+    /**
+     * Removes a product from the catalogue. Refused while the slot still holds
+     * stock — the technician must empty it first, so product that is physically
+     * in the machine is never silently discarded.
+     *
+     * @throws UnknownProductException   when the selector names no product
+     * @throws ProductInStockException   when the product still has stock
+     */
+    public function removeProduct(string $selector): void
+    {
+        $product = $this->catalogue->get($selector);
+
+        if ($this->inventory->countOf($product->selector()) > 0) {
+            throw ProductInStockException::forSelector($product->selector());
+        }
+
+        $this->catalogue = $this->catalogue->withoutProduct($product->selector());
+        $this->inventory = $this->inventory->without($product->selector());
+    }
+
+    /**
+     * Refills a product to an absolute count. A servicing operation; the product
+     * must already be in the catalogue, so a slot cannot be stocked for something
+     * the machine does not sell.
+     *
+     * @throws UnknownProductException when the selector names no product
+     */
+    public function setStock(string $selector, int $count): void
+    {
+        $product = $this->catalogue->get($selector);
+        $this->inventory = $this->inventory->withStock($product->selector(), $count);
     }
 
     /**
