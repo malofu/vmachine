@@ -12,6 +12,13 @@ Everything else (PHP 8.3, Composer, Pest, PHPStan) runs inside the container —
 
 ## Getting started
 
+Clone the repository (the `main` branch holds the latest reviewed state):
+
+```bash
+git clone https://github.com/malofu/vmachine.git
+cd vmachine
+```
+
 Build the image and install dependencies:
 
 ```bash

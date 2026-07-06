@@ -90,8 +90,16 @@ if ($persistence === 'sqlite') {
     $repository = new SqliteVendingMachineRepository($pdo, $dataDir . '/schema.sql');
 
     // Seed only a never-provisioned store, from the shipped SQL; an existing
-    // database is loaded verbatim, so a restart resumes the real state.
-    if ($repository->get()->catalogue()->all() === []) {
+    // database is loaded verbatim, so a restart resumes the real state. "Never
+    // provisioned" means every table the seed writes is empty: guarding on the
+    // catalogue alone would let the seed collide with pre-existing coin_bank or
+    // inventory rows and crash on a PRIMARY KEY conflict.
+    $machine = $repository->get();
+    $unprovisioned = $machine->catalogue()->all() === []
+        && $machine->inventory()->counts() === []
+        && $machine->coinBank()->counts() === [];
+
+    if ($unprovisioned) {
         $pdo->exec((string) file_get_contents($dataDir . '/seed.sql'));
     }
 } else {

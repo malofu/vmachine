@@ -270,7 +270,15 @@ final class VendingMachineConsole
         }
 
         $this->serviceMode = true;
-        $this->writeln('Service mode. Commands: product <selector> <price>, remove <selector>, stock <product> <count>, change <coin> <count>, state, exit.');
+        $this->writeln('Service mode.');
+        $this->writeln('Commands:');
+        $this->writeln('  product <selector> <price>  add or reprice a product (e.g. product water 0.65)');
+        $this->writeln('  remove <selector>           remove a product (e.g. remove water)');
+        $this->writeln('  stock <product> <count>     set a product\'s stock (e.g. stock water 10)');
+        $this->writeln('  change <coin> <count>       set a coin\'s change count (e.g. change 0.25 20)');
+        $this->writeln('  state                       show stock and change counts');
+        $this->writeln('  exit                        leave service mode');
+        $this->writeln('');
         $this->showServiceState();
     }
 
