@@ -35,3 +35,35 @@ it('preserves the order coins were inserted', function () {
 
     expect($money->coins())->toBe([Coin::FiveCents, Coin::OneEuro, Coin::TenCents]);
 });
+
+it('tallies its coins per denomination for a repository to snapshot', function () {
+    $money = InsertedMoney::none()
+        ->add(Coin::TenCents)
+        ->add(Coin::OneEuro)
+        ->add(Coin::TenCents);
+
+    expect($money->counts())->toBe([10 => 2, 100 => 1]);
+});
+
+it('rebuilds from a per-denomination tally, preserving the total', function () {
+    $money = InsertedMoney::fromCounts([25 => 2, 5 => 1]);
+
+    expect($money->total())->toBe(55)
+        ->and($money->counts())->toBe([25 => 2, 5 => 1]);
+});
+
+it('round-trips counts() and fromCounts() without changing the total', function () {
+    $original = InsertedMoney::none()
+        ->add(Coin::OneEuro)
+        ->add(Coin::FiveCents)
+        ->add(Coin::OneEuro);
+
+    $rebuilt = InsertedMoney::fromCounts($original->counts());
+
+    expect($rebuilt->total())->toBe($original->total());
+});
+
+it('is empty when rebuilt from no counts', function () {
+    expect(InsertedMoney::fromCounts([])->total())->toBe(0)
+        ->and(InsertedMoney::fromCounts([])->coins())->toBe([]);
+});

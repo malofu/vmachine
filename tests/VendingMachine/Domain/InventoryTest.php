@@ -38,3 +38,11 @@ it('drops a slot entirely', function () {
 
     expect($inventory->countOf('WATER'))->toBe(0);
 });
+
+it('exposes its stock as a selector-keyed map for a repository to snapshot', function () {
+    $inventory = Inventory::empty()
+        ->withStock('WATER', 5)
+        ->withStock('JUICE', 3);
+
+    expect($inventory->counts())->toBe(['WATER' => 5, 'JUICE' => 3]);
+});

@@ -20,6 +20,7 @@ use VendingMachine\Domain\ProductCatalogue;
 use VendingMachine\Domain\VendingMachine;
 use VendingMachine\Infrastructure\Cli\VendingMachineConsole;
 use VendingMachine\Infrastructure\Persistence\InMemoryVendingMachineRepository;
+use VendingMachine\Infrastructure\Persistence\SqliteVendingMachineRepository;
 
 require __DIR__ . '/../vendor/autoload.php';
 
@@ -42,27 +43,61 @@ if (is_file($envFile)) {
     }
 }
 
-// Seed the machine with a catalogue, stock and change so it can vend right away.
-// Setting this at runtime is the Service technician's job; the bootstrap just
-// provisions sensible defaults here in the infrastructure layer.
-$catalogue = ProductCatalogue::empty()
-    ->withProduct(Product::new('WATER', 65))
-    ->withProduct(Product::new('JUICE', 100))
-    ->withProduct(Product::new('SODA', 150));
+// Default provisioning for a machine that has never been stocked. Setting this
+// at runtime is the Service technician's job; the bootstrap just seeds sensible
+// defaults for a fresh store. For SQLite these defaults live in data/seed.sql;
+// the PHP factory below seeds the in-memory store, which cannot run SQL.
+$defaultMachine = static function (): VendingMachine {
+    $catalogue = ProductCatalogue::empty()
+        ->withProduct(Product::new('WATER', 65))
+        ->withProduct(Product::new('JUICE', 100))
+        ->withProduct(Product::new('SODA', 150));
 
-$inventory = Inventory::empty()
-    ->withStock('WATER', 5)
-    ->withStock('JUICE', 5)
-    ->withStock('SODA', 5);
+    $inventory = Inventory::empty()
+        ->withStock('WATER', 5)
+        ->withStock('JUICE', 5)
+        ->withStock('SODA', 5);
 
-$coinBank = CoinBank::empty()
-    ->withCoins(Coin::OneEuro, 10)
-    ->withCoins(Coin::TwentyFiveCents, 20)
-    ->withCoins(Coin::TenCents, 20)
-    ->withCoins(Coin::FiveCents, 20);
+    $coinBank = CoinBank::empty()
+        ->withCoins(Coin::OneEuro, 10)
+        ->withCoins(Coin::TwentyFiveCents, 20)
+        ->withCoins(Coin::TenCents, 20)
+        ->withCoins(Coin::FiveCents, 20);
 
-$repository = new InMemoryVendingMachineRepository();
-$repository->save(VendingMachine::stocked($catalogue, $inventory, $coinBank));
+    return VendingMachine::stocked($catalogue, $inventory, $coinBank);
+};
+
+// Pick the persistence adapter. Default: in-memory, so the state lives only for
+// the process and the default run stays side-effect-free. Opt into durable
+// storage with PERSISTENCE=sqlite; DB_PATH sets the database file (relative
+// paths resolve from the project root, default data/machine.sqlite).
+$persistence = getenv('PERSISTENCE') ?: 'memory';
+
+if ($persistence === 'sqlite') {
+    $dataDir = dirname(__DIR__) . '/data';
+
+    $dbPath = getenv('DB_PATH') ?: 'data/machine.sqlite';
+    if (preg_match('#^(/|[A-Za-z]:)#', $dbPath) !== 1) {
+        $dbPath = dirname(__DIR__) . '/' . $dbPath;
+    }
+
+    $dbDir = dirname($dbPath);
+    if (!is_dir($dbDir)) {
+        mkdir($dbDir, 0777, true);
+    }
+
+    $pdo = new PDO('sqlite:' . $dbPath);
+    $repository = new SqliteVendingMachineRepository($pdo, $dataDir . '/schema.sql');
+
+    // Seed only a never-provisioned store, from the shipped SQL; an existing
+    // database is loaded verbatim, so a restart resumes the real state.
+    if ($repository->get()->catalogue()->all() === []) {
+        $pdo->exec((string) file_get_contents($dataDir . '/seed.sql'));
+    }
+} else {
+    $repository = new InMemoryVendingMachineRepository();
+    $repository->save($defaultMachine());
+}
 
 // The passcode that unlocks service mode — infrastructure config from .env,
 // standing in for the technician's physical key (not real authentication).

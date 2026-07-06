@@ -39,6 +39,21 @@ final class VendingMachine
         return new self(InsertedMoney::none(), $catalogue, $inventory, $coinBank);
     }
 
+    /**
+     * Reconstitutes a machine from persisted state. Unlike {@see stocked()},
+     * which starts a fresh customer session, this carries the inserted money
+     * through, so a machine reloaded from a store resumes exactly where it left
+     * off. The seam a persistence adapter rebuilds the aggregate through.
+     */
+    public static function restore(
+        ProductCatalogue $catalogue,
+        Inventory $inventory,
+        CoinBank $coinBank,
+        InsertedMoney $insertedMoney,
+    ): self {
+        return new self($insertedMoney, $catalogue, $inventory, $coinBank);
+    }
+
     public function insertCoin(Coin $coin): void
     {
         $this->insertedMoney = $this->insertedMoney->add($coin);
@@ -112,6 +127,32 @@ final class VendingMachine
     public function catalogue(): ProductCatalogue
     {
         return $this->catalogue;
+    }
+
+    /**
+     * The stock inventory, exposed for a repository to snapshot. Immutable, like
+     * the catalogue — handing it out cannot mutate the machine.
+     */
+    public function inventory(): Inventory
+    {
+        return $this->inventory;
+    }
+
+    /**
+     * The coin bank, exposed for a repository to snapshot.
+     */
+    public function coinBank(): CoinBank
+    {
+        return $this->coinBank;
+    }
+
+    /**
+     * The money the customer has inserted so far, exposed for a repository to
+     * snapshot.
+     */
+    public function insertedMoney(): InsertedMoney
+    {
+        return $this->insertedMoney;
     }
 
     /**

@@ -1,0 +1,10 @@
+# The runtime SQLite database is machine-local, never committed.
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
+
+# Keep the versioned SQL sources tracked.
+!.gitignore
+!schema.sql
+!seed.sql

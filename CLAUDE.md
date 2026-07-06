@@ -12,7 +12,8 @@ In this project we are implementing a vending machine. We are using Docker and p
 - Keep the solution simple. Do not add patterns, layers or infrastructure the task does not need.
 - Ask before adding any dependency.
 - Plain PHP + Composer for this scope.
-- State is kept in memory for this scope.
+- State is kept behind the `VendingMachineRepository` port. Two adapters ship: in-memory (the default,
+  used by the tests and a plain run) and SQLite (opt-in via `PERSISTENCE=sqlite`, state survives restarts).
 - The entry point will be a CLI for this scope.
 - Amounts have to be treated as cents, use integers.
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use VendingMachine\Domain\CannotMakeChangeException;
 use VendingMachine\Domain\Coin;
 use VendingMachine\Domain\CoinBank;
+use VendingMachine\Domain\InsertedMoney;
 use VendingMachine\Domain\InsufficientMoneyException;
 use VendingMachine\Domain\Inventory;
 use VendingMachine\Domain\OutOfStockException;
@@ -195,4 +196,27 @@ it('refuses to sell when it cannot compose exact change and keeps the money inse
     expect(fn () => $machine->buy('WATER'))->toThrow(CannotMakeChangeException::class)
         ->and($machine->insertedBalance())->toBe(100)
         ->and($machine->stockOf('WATER'))->toBe(1);
+});
+
+it('exposes its state through the persistence accessors', function () {
+    $machine = machineWith(waterStock: 4, coins: [[Coin::OneEuro, 2]]);
+    $machine->insertCoin(Coin::TwentyFiveCents);
+
+    expect($machine->inventory()->counts())->toBe(['WATER' => 4])
+        ->and($machine->coinBank()->counts())->toBe([100 => 2])
+        ->and($machine->insertedMoney()->counts())->toBe([25 => 1]);
+});
+
+it('restores a machine from persisted state, resuming the inserted balance', function () {
+    $machine = VendingMachine::restore(
+        ProductCatalogue::empty()->withProduct(Product::new('SODA', 150)),
+        Inventory::empty()->withStock('SODA', 2),
+        CoinBank::empty()->withCoins(Coin::TenCents, 5),
+        InsertedMoney::fromCounts([100 => 1, 25 => 1]),
+    );
+
+    expect($machine->insertedBalance())->toBe(125)
+        ->and($machine->stockOf('SODA'))->toBe(2)
+        ->and($machine->catalogue()->get('SODA')->price())->toBe(150)
+        ->and($machine->coinStockOf(Coin::TenCents))->toBe(5);
 });
