@@ -13,6 +13,7 @@ use VendingMachine\Domain\InsufficientMoneyException;
 use VendingMachine\Domain\Inventory;
 use VendingMachine\Domain\OutOfStockException;
 use VendingMachine\Domain\Product;
+use VendingMachine\Domain\ProductCatalogue;
 use VendingMachine\Domain\UnknownProductException;
 use VendingMachine\Domain\VendingMachine;
 use VendingMachine\Infrastructure\Persistence\InMemoryVendingMachineRepository;
@@ -29,7 +30,8 @@ function repositoryFor(int $waterStock, array $coins): InMemoryVendingMachineRep
 
     $repository = new InMemoryVendingMachineRepository();
     $repository->save(VendingMachine::stocked(
-        Inventory::empty()->withStock(Product::Water, $waterStock),
+        ProductCatalogue::empty()->withProduct(Product::new('WATER', 65)),
+        Inventory::empty()->withStock('WATER', $waterStock),
         $bank,
     ));
 
@@ -45,7 +47,7 @@ it('buys a product and reports the selector, change and cleared balance', functi
     expect($response->productSelector)->toBe('WATER')
         ->and($response->changeInCents)->toBe([25, 10])
         ->and($response->balanceInCents)->toBe(0)
-        ->and($repository->get()->stockOf(Product::Water))->toBe(0);
+        ->and($repository->get()->stockOf('WATER'))->toBe(0);
 });
 
 it('rejects an unknown product and leaves the balance untouched', function () {

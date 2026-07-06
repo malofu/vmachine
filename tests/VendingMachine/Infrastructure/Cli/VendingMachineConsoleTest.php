@@ -4,16 +4,41 @@ declare(strict_types=1);
 
 use VendingMachine\Application\BuyProduct\BuyProductHandler;
 use VendingMachine\Application\InsertCoin\InsertCoinHandler;
+use VendingMachine\Application\RemoveProduct\RemoveProductHandler;
 use VendingMachine\Application\ReturnCoins\ReturnCoinsHandler;
-use VendingMachine\Application\ServiceMachine\ServiceMachineHandler;
+use VendingMachine\Application\ServiceMachine\ServiceReportHandler;
+use VendingMachine\Application\SetChange\SetChangeHandler;
+use VendingMachine\Application\SetProductPrice\SetProductPriceHandler;
+use VendingMachine\Application\SetProductStock\SetProductStockHandler;
 use VendingMachine\Application\ViewState\ViewStateHandler;
 use VendingMachine\Domain\Coin;
 use VendingMachine\Domain\CoinBank;
 use VendingMachine\Domain\Inventory;
 use VendingMachine\Domain\Product;
+use VendingMachine\Domain\ProductCatalogue;
 use VendingMachine\Domain\VendingMachine;
 use VendingMachine\Infrastructure\Cli\VendingMachineConsole;
 use VendingMachine\Infrastructure\Persistence\InMemoryVendingMachineRepository;
+
+/**
+ * The default three-product catalogue (Water, Juice, Soda), in the order the
+ * customer sees them.
+ */
+function fullCatalogue(): ProductCatalogue
+{
+    return ProductCatalogue::empty()
+        ->withProduct(Product::new('WATER', 65))
+        ->withProduct(Product::new('JUICE', 100))
+        ->withProduct(Product::new('SODA', 150));
+}
+
+/**
+ * A single-product catalogue, for scenarios that only exercise Water.
+ */
+function waterCatalogue(): ProductCatalogue
+{
+    return ProductCatalogue::empty()->withProduct(Product::new('WATER', 65));
+}
 
 /**
  * A machine with plenty of stock and change, so a scenario only has to worry
@@ -22,10 +47,11 @@ use VendingMachine\Infrastructure\Persistence\InMemoryVendingMachineRepository;
 function stockedMachine(): VendingMachine
 {
     return VendingMachine::stocked(
+        fullCatalogue(),
         Inventory::empty()
-            ->withStock(Product::Water, 2)
-            ->withStock(Product::Juice, 1)
-            ->withStock(Product::Soda, 1),
+            ->withStock('WATER', 2)
+            ->withStock('JUICE', 1)
+            ->withStock('SODA', 1),
         CoinBank::empty()
             ->withCoins(Coin::OneEuro, 5)
             ->withCoins(Coin::TwentyFiveCents, 10)
@@ -53,7 +79,11 @@ function runConsoleWith(string $input, ?VendingMachine $machine = null, string $
         new ReturnCoinsHandler($repository),
         new BuyProductHandler($repository),
         new ViewStateHandler($repository),
-        new ServiceMachineHandler($repository),
+        new SetProductPriceHandler($repository),
+        new SetProductStockHandler($repository),
+        new RemoveProductHandler($repository),
+        new SetChangeHandler($repository),
+        new ServiceReportHandler($repository),
         $serviceCode,
         $in,
         $out,
@@ -150,7 +180,8 @@ it('refuses to sell when the balance is insufficient and keeps the balance', fun
 
 it('refuses to sell an out-of-stock product and keeps the balance', function () {
     $machine = VendingMachine::stocked(
-        Inventory::empty()->withStock(Product::Water, 0),
+        waterCatalogue(),
+        Inventory::empty()->withStock('WATER', 0),
         CoinBank::empty()->withCoins(Coin::TenCents, 10),
     );
 
@@ -161,7 +192,8 @@ it('refuses to sell an out-of-stock product and keeps the balance', function () 
 
 it('refuses to sell when it cannot compose exact change and keeps the balance', function () {
     $machine = VendingMachine::stocked(
-        Inventory::empty()->withStock(Product::Water, 1),
+        waterCatalogue(),
+        Inventory::empty()->withStock('WATER', 1),
         CoinBank::empty(),
     );
 
@@ -178,10 +210,11 @@ it('reports an unknown product and lists the ones it sells', function () {
 
 it('shows the balance, products, prices and availability on request', function () {
     $machine = VendingMachine::stocked(
+        fullCatalogue(),
         Inventory::empty()
-            ->withStock(Product::Water, 2)
-            ->withStock(Product::Juice, 1)
-            ->withStock(Product::Soda, 0),
+            ->withStock('WATER', 2)
+            ->withStock('JUICE', 1)
+            ->withStock('SODA', 0),
         CoinBank::empty(),
     );
 
@@ -196,7 +229,8 @@ it('shows the balance, products, prices and availability on request', function (
 
 it('reflects a purchase in the state it reports afterwards', function () {
     $machine = VendingMachine::stocked(
-        Inventory::empty()->withStock(Product::Water, 1),
+        waterCatalogue(),
+        Inventory::empty()->withStock('WATER', 1),
         CoinBank::empty()
             ->withCoins(Coin::TwentyFiveCents, 1)
             ->withCoins(Coin::TenCents, 1),
@@ -217,7 +251,8 @@ it('refuses service mode when the code is wrong and keeps the customer out', fun
 
 it('does not honour service commands without unlocking service mode', function () {
     $machine = VendingMachine::stocked(
-        Inventory::empty()->withStock(Product::Water, 0),
+        waterCatalogue(),
+        Inventory::empty()->withStock('WATER', 0),
         CoinBank::empty(),
     );
 
@@ -239,33 +274,34 @@ it('enters service mode with the right code and shows the technician view', func
         ->and($output)->toContain('Total change: 9.00');
 });
 
-it('refills stock and change on apply, reflected in the technician view', function () {
+it('refills stock and change immediately, reflected in the technician view', function () {
     $machine = VendingMachine::stocked(
-        Inventory::empty()->withStock(Product::Water, 0),
+        waterCatalogue(),
+        Inventory::empty()->withStock('WATER', 0),
         CoinBank::empty(),
     );
 
     $output = runConsoleWith(
-        "service\n1234\nstock water 5\nchange 0.25 8\napply\nstate\nexit\nexit\n",
+        "service\n1234\nstock water 5\nchange 0.25 8\nexit\nexit\n",
         $machine,
     );
 
-    expect($output)->toContain('Applied.')
-        ->and($output)->toContain('- WATER (0.65): 5')
+    expect($output)->toContain('- WATER (0.65): 5')
         ->and($output)->toContain('- 0.25: 8')
         ->and($output)->toContain('Total change: 2.00');
 });
 
 it('makes a refilled product buyable again for the customer', function () {
     $machine = VendingMachine::stocked(
-        Inventory::empty()->withStock(Product::Water, 0),
+        waterCatalogue(),
+        Inventory::empty()->withStock('WATER', 0),
         CoinBank::empty(),
     );
 
     // Sold out at first; the technician refills Water and loads exact-change coins,
     // then the customer buys it.
     $output = runConsoleWith(
-        "service\n1234\nstock water 1\nchange 0.25 1\nchange 0.10 1\napply\nexit\n1\nget water\nexit\n",
+        "service\n1234\nstock water 1\nchange 0.25 1\nchange 0.10 1\nexit\n1\nget water\nexit\n",
         $machine,
     );
 
@@ -274,18 +310,59 @@ it('makes a refilled product buyable again for the customer', function () {
         ->and($output)->toContain('Dispensed: WATER. Change: 0.25, 0.10. Balance: 0.00');
 });
 
-it('reports a bad entry on apply and changes nothing', function () {
+it('rejects a bad service command and changes nothing', function () {
     $machine = VendingMachine::stocked(
-        Inventory::empty()->withStock(Product::Water, 0),
+        waterCatalogue(),
+        Inventory::empty()->withStock('WATER', 0),
         CoinBank::empty(),
     );
 
     $output = runConsoleWith(
-        "service\n1234\nstock cola 5\napply\nstate\nexit\nexit\n",
+        "service\n1234\nstock cola 5\nstate\nexit\nexit\n",
         $machine,
     );
 
-    expect($output)->toContain('Cannot apply:')
-        ->and($output)->toContain('Nothing changed.')
+    expect($output)->toContain('Rejected:')
         ->and($output)->toContain('- WATER (0.65): 0');
+});
+
+it('is not blocked by a rejected command: a later valid one still applies', function () {
+    $machine = VendingMachine::stocked(
+        waterCatalogue(),
+        Inventory::empty()->withStock('WATER', 0),
+        CoinBank::empty(),
+    );
+
+    // 'stock cola 5' is rejected (COLA is not sold); the following valid
+    // 'stock water 3' must still take effect — nothing lingers to poison it.
+    $output = runConsoleWith(
+        "service\n1234\nstock cola 5\nstock water 3\nexit\nexit\n",
+        $machine,
+    );
+
+    expect($output)->toContain('Rejected:')
+        ->and($output)->toContain('- WATER (0.65): 3');
+});
+
+it('lets the technician define a new product that a customer can then buy', function () {
+    // Starts from the default three-product machine and adds COLA at 1.25.
+    $output = runConsoleWith(
+        "service\n1234\nproduct cola 1.25\nstock cola 3\nexit\n1\n0.25\nget cola\nexit\n",
+    );
+
+    expect($output)->toContain('- COLA (1.25): 3')
+        ->and($output)->toContain('- COLA (1.25): available')
+        ->and($output)->toContain('Dispensed: COLA. Change: none. Balance: 0.00');
+});
+
+it('refuses to remove a stocked product, then removes it once the slot is emptied', function () {
+    $output = runConsoleWith(
+        "service\n1234\nproduct cola 1.25\nstock cola 2\n"
+        . "remove cola\n"
+        . "stock cola 0\nremove cola\nexit\n"
+        . "get cola\nexit\n",
+    );
+
+    expect($output)->toContain('still has stock')
+        ->and($output)->toContain('Unknown product: "cola"');
 });

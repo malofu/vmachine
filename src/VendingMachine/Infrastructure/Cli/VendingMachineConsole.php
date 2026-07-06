@@ -8,19 +8,28 @@ use VendingMachine\Application\BuyProduct\BuyProductCommand;
 use VendingMachine\Application\BuyProduct\BuyProductHandler;
 use VendingMachine\Application\InsertCoin\InsertCoinCommand;
 use VendingMachine\Application\InsertCoin\InsertCoinHandler;
+use VendingMachine\Application\RemoveProduct\RemoveProductCommand;
+use VendingMachine\Application\RemoveProduct\RemoveProductHandler;
 use VendingMachine\Application\ReturnCoins\ReturnCoinsCommand;
 use VendingMachine\Application\ReturnCoins\ReturnCoinsHandler;
 use VendingMachine\Application\ServiceMachine\MachineReport;
-use VendingMachine\Application\ServiceMachine\ServiceMachineCommand;
-use VendingMachine\Application\ServiceMachine\ServiceMachineHandler;
+use VendingMachine\Application\ServiceMachine\ServiceReportHandler;
+use VendingMachine\Application\SetChange\SetChangeCommand;
+use VendingMachine\Application\SetChange\SetChangeHandler;
+use VendingMachine\Application\SetProductPrice\SetProductPriceCommand;
+use VendingMachine\Application\SetProductPrice\SetProductPriceHandler;
+use VendingMachine\Application\SetProductStock\SetProductStockCommand;
+use VendingMachine\Application\SetProductStock\SetProductStockHandler;
+use VendingMachine\Application\ViewState\ProductState;
 use VendingMachine\Application\ViewState\ViewStateCommand;
 use VendingMachine\Application\ViewState\ViewStateHandler;
 use VendingMachine\Domain\CannotMakeChangeException;
 use VendingMachine\Domain\Coin;
 use VendingMachine\Domain\InsufficientMoneyException;
 use VendingMachine\Domain\InvalidCoinException;
+use VendingMachine\Domain\InvalidProductException;
 use VendingMachine\Domain\OutOfStockException;
-use VendingMachine\Domain\Product;
+use VendingMachine\Domain\ProductInStockException;
 use VendingMachine\Domain\UnknownProductException;
 
 /**
@@ -50,12 +59,6 @@ final class VendingMachineConsole
     /** Whether the technician has unlocked service mode. */
     private bool $serviceMode = false;
 
-    /** @var array<string, int> pending item counts staged in service mode (selector => count) */
-    private array $pendingProductCounts = [];
-
-    /** @var array<int, int> pending coin counts staged in service mode (cents => count) */
-    private array $pendingCoinCounts = [];
-
     /**
      * @param resource $input
      * @param resource $output
@@ -65,7 +68,11 @@ final class VendingMachineConsole
         private readonly ReturnCoinsHandler $returnCoins,
         private readonly BuyProductHandler $buyProduct,
         private readonly ViewStateHandler $viewState,
-        private readonly ServiceMachineHandler $serviceMachine,
+        private readonly SetProductPriceHandler $setProductPrice,
+        private readonly SetProductStockHandler $setProductStock,
+        private readonly RemoveProductHandler $removeProduct,
+        private readonly SetChangeHandler $setChange,
+        private readonly ServiceReportHandler $serviceReport,
         private readonly string $serviceCode,
         $input = STDIN,
         $output = STDOUT,
@@ -263,9 +270,7 @@ final class VendingMachineConsole
         }
 
         $this->serviceMode = true;
-        $this->pendingProductCounts = [];
-        $this->pendingCoinCounts = [];
-        $this->writeln('Service mode. Commands: stock <product> <count>, change <coin> <count>, state, apply, exit.');
+        $this->writeln('Service mode. Commands: product <selector> <price>, remove <selector>, stock <product> <count>, change <coin> <count>, state, exit.');
         $this->showServiceState();
     }
 
@@ -287,89 +292,128 @@ final class VendingMachineConsole
             return;
         }
 
-        if ($command === 'apply') {
-            $this->applyService();
+        if (preg_match('/^product\s+(\w+)\s+(\S+)$/i', $entry, $matches) === 1) {
+            $this->handleSetProductPrice($matches[1], $matches[2]);
+
+            return;
+        }
+
+        if (preg_match('/^remove\s+(\w+)$/i', $entry, $matches) === 1) {
+            $this->handleRemoveProduct($matches[1]);
 
             return;
         }
 
         if (preg_match('/^stock\s+(\w+)\s+(\d+)$/i', $entry, $matches) === 1) {
-            $this->pendingProductCounts[strtoupper($matches[1])] = (int) $matches[2];
-            $this->writeln(sprintf('Staged: %s -> %d. Type \'apply\' to commit.', strtoupper($matches[1]), (int) $matches[2]));
+            $this->handleSetStock($matches[1], (int) $matches[2]);
 
             return;
         }
 
         if (preg_match('/^change\s+(\S+)\s+(\d+)$/i', $entry, $matches) === 1) {
-            $cents = $this->parseCents($matches[1]);
-
-            if ($cents === null) {
-                $this->writeln(sprintf('Unrecognised amount: "%s".', $matches[1]));
-
-                return;
-            }
-
-            $this->pendingCoinCounts[$cents] = (int) $matches[2];
-            $this->writeln(sprintf('Staged: %s -> %d. Type \'apply\' to commit.', $this->format($cents), (int) $matches[2]));
+            $this->handleSetChange($matches[1], (int) $matches[2]);
 
             return;
         }
 
         $this->writeln(sprintf(
-            'Unrecognised service command: "%s". Use stock <product> <count>, change <coin> <count>, state, apply or exit.',
+            'Unrecognised service command: "%s". Use product <selector> <price>, remove <selector>, '
+            . 'stock <product> <count>, change <coin> <count>, state or exit.',
             $entry,
         ));
     }
 
     /**
-     * Commits the staged setup as one atomic servicing action. On an unknown
-     * product or invalid coin nothing is changed and the draft is kept so the
-     * technician can fix it.
+     * Defines a product or reprices it, then shows the resulting state. Each
+     * service action is applied on its own, atomically; a rejected one changes
+     * nothing and leaves nothing behind to retry.
      */
-    private function applyService(): void
+    private function handleSetProductPrice(string $selector, string $price): void
     {
-        try {
-            $report = ($this->serviceMachine)(new ServiceMachineCommand(
-                $this->pendingProductCounts,
-                $this->pendingCoinCounts,
-            ));
-        } catch (UnknownProductException | InvalidCoinException $e) {
-            $this->writeln(sprintf('Cannot apply: %s Nothing changed.', $e->getMessage()));
+        $cents = $this->parseCents($price);
+
+        if ($cents === null) {
+            $this->writeln(sprintf('Unrecognised price: "%s".', $price));
 
             return;
         }
 
-        $this->pendingProductCounts = [];
-        $this->pendingCoinCounts = [];
-        $this->writeln('Applied.');
-        $this->printReport($report);
+        try {
+            ($this->setProductPrice)(new SetProductPriceCommand($selector, $cents));
+        } catch (InvalidProductException $e) {
+            $this->writeln(sprintf('Rejected: %s', $e->getMessage()));
+
+            return;
+        }
+
+        $this->showServiceState();
+    }
+
+    private function handleSetStock(string $selector, int $count): void
+    {
+        try {
+            ($this->setProductStock)(new SetProductStockCommand($selector, $count));
+        } catch (UnknownProductException $e) {
+            $this->writeln(sprintf('Rejected: %s', $e->getMessage()));
+
+            return;
+        }
+
+        $this->showServiceState();
+    }
+
+    private function handleRemoveProduct(string $selector): void
+    {
+        try {
+            ($this->removeProduct)(new RemoveProductCommand($selector));
+        } catch (UnknownProductException | ProductInStockException $e) {
+            $this->writeln(sprintf('Rejected: %s', $e->getMessage()));
+
+            return;
+        }
+
+        $this->showServiceState();
+    }
+
+    private function handleSetChange(string $coin, int $count): void
+    {
+        $cents = $this->parseCents($coin);
+
+        if ($cents === null) {
+            $this->writeln(sprintf('Unrecognised amount: "%s".', $coin));
+
+            return;
+        }
+
+        try {
+            ($this->setChange)(new SetChangeCommand($cents, $count));
+        } catch (InvalidCoinException $e) {
+            $this->writeln(sprintf('Rejected: %s', $e->getMessage()));
+
+            return;
+        }
+
+        $this->showServiceState();
     }
 
     /**
-     * Leaves service mode, discarding any staged-but-unapplied setup, and shows
-     * the customer face again.
+     * Leaves service mode and shows the customer face again. Nothing is staged,
+     * so there is nothing to discard.
      */
     private function exitServiceMode(): void
     {
-        if ($this->pendingProductCounts !== [] || $this->pendingCoinCounts !== []) {
-            $this->writeln('Discarded un-applied changes.');
-        }
-
         $this->serviceMode = false;
-        $this->pendingProductCounts = [];
-        $this->pendingCoinCounts = [];
         $this->writeln('Service closed.');
         $this->handleState();
     }
 
     /**
-     * The technician view: exact per-product and per-denomination counts. Sent
-     * as an empty service command, which applies nothing and returns the
-     * current report.
+     * The technician view: exact per-product and per-denomination counts. Also
+     * shown after each service action, so the technician sees its effect.
      */
     private function showServiceState(): void
     {
-        $this->printReport(($this->serviceMachine)(new ServiceMachineCommand()));
+        $this->printReport(($this->serviceReport)());
     }
 
     private function printReport(MachineReport $report): void
@@ -415,13 +459,20 @@ final class VendingMachineConsole
 
     /**
      * The products the machine can sell, formatted for display. Sourced from the
-     * Product enum so the domain stays the single authority on the catalogue.
+     * state query so the live catalogue stays the single authority on what the
+     * machine sells.
      */
     private function availableProducts(): string
     {
+        $response = ($this->viewState)(new ViewStateCommand());
+
         return implode(', ', array_map(
-            fn (Product $product): string => sprintf('%s (%s)', $product->selector(), $this->format($product->price())),
-            Product::cases(),
+            fn (ProductState $product): string => sprintf(
+                '%s (%s)',
+                $product->selector,
+                $this->format($product->priceInCents),
+            ),
+            $response->products,
         ));
     }
 
