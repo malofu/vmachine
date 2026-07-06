@@ -5,13 +5,18 @@ declare(strict_types=1);
 
 use VendingMachine\Application\BuyProduct\BuyProductHandler;
 use VendingMachine\Application\InsertCoin\InsertCoinHandler;
+use VendingMachine\Application\RemoveProduct\RemoveProductHandler;
 use VendingMachine\Application\ReturnCoins\ReturnCoinsHandler;
-use VendingMachine\Application\ServiceMachine\ServiceMachineHandler;
+use VendingMachine\Application\ServiceMachine\ServiceReportHandler;
+use VendingMachine\Application\SetChange\SetChangeHandler;
+use VendingMachine\Application\SetProductPrice\SetProductPriceHandler;
+use VendingMachine\Application\SetProductStock\SetProductStockHandler;
 use VendingMachine\Application\ViewState\ViewStateHandler;
 use VendingMachine\Domain\Coin;
 use VendingMachine\Domain\CoinBank;
 use VendingMachine\Domain\Inventory;
 use VendingMachine\Domain\Product;
+use VendingMachine\Domain\ProductCatalogue;
 use VendingMachine\Domain\VendingMachine;
 use VendingMachine\Infrastructure\Cli\VendingMachineConsole;
 use VendingMachine\Infrastructure\Persistence\InMemoryVendingMachineRepository;
@@ -37,13 +42,18 @@ if (is_file($envFile)) {
     }
 }
 
-// Seed the machine with stock and change so it can vend right away. Setting
-// this at runtime is the Service technician's job (a later story); until then
-// the bootstrap provisions sensible defaults here in the infrastructure layer.
+// Seed the machine with a catalogue, stock and change so it can vend right away.
+// Setting this at runtime is the Service technician's job; the bootstrap just
+// provisions sensible defaults here in the infrastructure layer.
+$catalogue = ProductCatalogue::empty()
+    ->withProduct(Product::new('WATER', 65))
+    ->withProduct(Product::new('JUICE', 100))
+    ->withProduct(Product::new('SODA', 150));
+
 $inventory = Inventory::empty()
-    ->withStock(Product::Water, 5)
-    ->withStock(Product::Juice, 5)
-    ->withStock(Product::Soda, 5);
+    ->withStock('WATER', 5)
+    ->withStock('JUICE', 5)
+    ->withStock('SODA', 5);
 
 $coinBank = CoinBank::empty()
     ->withCoins(Coin::OneEuro, 10)
@@ -52,7 +62,7 @@ $coinBank = CoinBank::empty()
     ->withCoins(Coin::FiveCents, 20);
 
 $repository = new InMemoryVendingMachineRepository();
-$repository->save(VendingMachine::stocked($inventory, $coinBank));
+$repository->save(VendingMachine::stocked($catalogue, $inventory, $coinBank));
 
 // The passcode that unlocks service mode — infrastructure config from .env,
 // standing in for the technician's physical key (not real authentication).
@@ -67,7 +77,11 @@ $console = new VendingMachineConsole(
     new ReturnCoinsHandler($repository),
     new BuyProductHandler($repository),
     new ViewStateHandler($repository),
-    new ServiceMachineHandler($repository),
+    new SetProductPriceHandler($repository),
+    new SetProductStockHandler($repository),
+    new RemoveProductHandler($repository),
+    new SetChangeHandler($repository),
+    new ServiceReportHandler($repository),
     $serviceCode,
 );
 
