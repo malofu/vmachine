@@ -9,6 +9,7 @@ use VendingMachine\Application\ViewState\ViewStateHandler;
 use VendingMachine\Domain\CoinBank;
 use VendingMachine\Domain\Inventory;
 use VendingMachine\Domain\Product;
+use VendingMachine\Domain\ProductCatalogue;
 use VendingMachine\Domain\VendingMachine;
 use VendingMachine\Infrastructure\Persistence\InMemoryVendingMachineRepository;
 
@@ -16,10 +17,14 @@ function stateRepository(): InMemoryVendingMachineRepository
 {
     $repository = new InMemoryVendingMachineRepository();
     $repository->save(VendingMachine::stocked(
+        ProductCatalogue::empty()
+            ->withProduct(Product::new('WATER', 65))
+            ->withProduct(Product::new('JUICE', 100))
+            ->withProduct(Product::new('SODA', 150)),
         Inventory::empty()
-            ->withStock(Product::Water, 3)
-            ->withStock(Product::Juice, 1)
-            ->withStock(Product::Soda, 0),
+            ->withStock('WATER', 3)
+            ->withStock('JUICE', 1)
+            ->withStock('SODA', 0),
         CoinBank::empty(),
     ));
 
@@ -63,5 +68,5 @@ it('does not alter the machine when viewing its state', function () {
     (new ViewStateHandler($repository))(new ViewStateCommand());
 
     expect($repository->get()->insertedBalance())->toBe(25)
-        ->and($repository->get()->stockOf(Product::Water))->toBe(3);
+        ->and($repository->get()->stockOf('WATER'))->toBe(3);
 });

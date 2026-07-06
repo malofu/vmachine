@@ -2,25 +2,29 @@
 
 declare(strict_types=1);
 
+use VendingMachine\Domain\InvalidProductException;
 use VendingMachine\Domain\Product;
-use VendingMachine\Domain\UnknownProductException;
 
-it('prices each product in cents', function (Product $product, int $priceInCents) {
-    expect($product->price())->toBe($priceInCents);
-})->with([
-    'Water' => [Product::Water, 65],
-    'Juice' => [Product::Juice, 100],
-    'Soda' => [Product::Soda, 150],
-]);
+it('holds a selector and a price in cents', function () {
+    $product = Product::new('WATER', 65);
 
-it('resolves a product from its selector, ignoring case', function (string $selector, Product $product) {
-    expect(Product::fromSelector($selector))->toBe($product);
-})->with([
-    'WATER' => ['WATER', Product::Water],
-    'juice' => ['juice', Product::Juice],
-    'Soda' => ['Soda', Product::Soda],
-]);
-
-it('rejects an unknown selector', function () {
-    expect(fn () => Product::fromSelector('COLA'))->toThrow(UnknownProductException::class);
+    expect($product->selector())->toBe('WATER')
+        ->and($product->price())->toBe(65);
 });
+
+it('normalizes the selector to trimmed uppercase', function () {
+    $product = Product::new('  cola  ', 125);
+
+    expect($product->selector())->toBe('COLA');
+});
+
+it('rejects an empty selector', function () {
+    expect(fn () => Product::new('   ', 65))->toThrow(InvalidProductException::class);
+});
+
+it('rejects a non-positive price', function (int $priceInCents) {
+    expect(fn () => Product::new('WATER', $priceInCents))->toThrow(InvalidProductException::class);
+})->with([
+    'zero' => [0],
+    'negative' => [-10],
+]);
